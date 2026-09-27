@@ -1,0 +1,33 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# Gradle
+.gradle/
+**/build/
+
+# Kotlin
+.kotlin/
+
+# Zmienne środowiskowe i sekrety
+.env
+.env.*
+!.env.example
+
+# Logi
+*.log
+
+# Windows / system
+Thumbs.db
+.DS_Store
+
+# React / Node.js - przyda się później
+node_modules/
+dist/
+
+# VS Code
+.vscode/
+
+# Archiwa
+*.zip
