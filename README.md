@@ -105,7 +105,7 @@ W ramach pierwszego etapu wykonano:
 
 ### Etap 2 – integracja i synchronizacja danych
 
-W kolejnym etapie planowane jest:
+W kolejnym etapie:
 
 - integracja z PandaScore API,
 - integracja z Riot Games API,
