@@ -30,6 +30,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PANDASCORE_API_TOKEN: ${PANDASCORE_API_TOKEN}
 
     ports:
       - "8080:8080"
