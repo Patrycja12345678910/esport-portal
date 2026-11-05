@@ -21,7 +21,10 @@ class TeamEntity (
     var country: String? = null,
 
     @Column(name="logo_url", length = 500)
-    var logoUrl: String? = null
+    var logoUrl: String? = null,
+
+    @Column(name = "external_id", unique = true ,length = 100)
+    var externalId: String? = null
 
 )
 
