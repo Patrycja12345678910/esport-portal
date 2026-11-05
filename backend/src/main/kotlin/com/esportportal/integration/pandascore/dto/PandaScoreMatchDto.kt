@@ -8,5 +8,8 @@ data class PandaScoreMatchDto(
     val id: Long,
     val name: String?,
     val status: String?,
-    val scheduledAt: String?
+    val scheduledAt: String?,
+    val tournament: PandaScoreTournamentDto?,
+    val opponents: List<PandaScoreOpponentDto>?,
+    val league: PandaScoreLeagueDto?
 )
