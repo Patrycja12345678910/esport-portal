@@ -14,7 +14,11 @@ class SecurityConfig {
             .authorizeHttpRequests { auth ->
                 auth
                     .requestMatchers("/api/test/pandascore").permitAll()
+                    .requestMatchers("/api/test/pandascore/sync").permitAll()
                     .anyRequest().authenticated()
+            }
+            .csrf { csrf ->
+                csrf.ignoringRequestMatchers("/api/test/pandascore/sync")
             }
             .formLogin { }
 
