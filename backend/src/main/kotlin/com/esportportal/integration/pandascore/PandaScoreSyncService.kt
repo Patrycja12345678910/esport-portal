@@ -5,7 +5,11 @@ import com.esportportal.persistence.repository.TeamRepository
 import com.esportportal.persistence.repository.TournamentRepository
 import com.esportportal.persistence.entity.TournamentEntity
 import com.esportportal.persistence.entity.GameEntity
+import com.esportportal.persistence.entity.MatchEntity
+import com.esportportal.persistence.entity.TournamentStageEntity
 import com.esportportal.persistence.repository.GameRepository
+import com.esportportal.persistence.repository.TournamentStageRepository
+import com.esportportal.persistence.repository.MatchRepository
 import org.springframework.stereotype.Service
 
 @Service
@@ -13,7 +17,9 @@ class PandaScoreSyncService(
     private val teamRepository: TeamRepository,
     private val tournamentRepository: TournamentRepository,
     private val gameRepository: GameRepository,
-    private val pandaScoreClient: PandaScoreClient
+    private val pandaScoreClient: PandaScoreClient,
+    private val tournamentStageRepository: TournamentStageRepository,
+    private val matchRepository: MatchRepository
 ) {
     fun findTeam(externalId: String): TeamEntity? {
         return teamRepository.findByExternalId(externalId)
@@ -43,6 +49,31 @@ class PandaScoreSyncService(
         tournament.game = game
 
         return tournamentRepository.save(tournament)
+    }
+
+    fun saveStage(externalId: String, name: String, tournament: TournamentEntity): TournamentStageEntity {
+        val tournamentStage = tournamentStageRepository.findByExternalId(externalId)
+        ?: TournamentStageEntity()
+
+        tournamentStage.externalId = externalId
+        tournamentStage.name = name
+        tournamentStage.tournament = tournament
+
+        return tournamentStageRepository.save(tournamentStage)
+    }
+
+    fun saveMatch(externalId: String, tournament: TournamentEntity, stage: TournamentStageEntity?, homeTeam: TeamEntity, awayTeam: TeamEntity): MatchEntity {
+        val match = matchRepository.findByExternalId(externalId)
+            ?: MatchEntity()
+
+        match.externalId = externalId
+        match.tournament = tournament
+        match.stage = stage
+        match.homeTeam = homeTeam
+        match.awayTeam = awayTeam
+
+        return matchRepository.save(match)
+
     }
 
     fun getCs2Game(): GameEntity {
@@ -75,22 +106,32 @@ class PandaScoreSyncService(
             println(league?.name)
             println(serie?.name)
 
-            saveTournament(serieId.toString(), tournamentName, game)
+
+            val tournament = saveTournament(serieId.toString(), tournamentName, game)
+
+            val stage = match.tournament
+            val stageId = stage?.id ?: continue
+
+            val stageName = stage.name ?: continue
+
+            val savedStage = saveStage(stageId.toString(), stageName, tournament )
 
             val opponents = match.opponents ?: emptyList()
+            val firstOpponent = opponents.getOrNull(0)
+            val secondOpponent = opponents.getOrNull(1)
+            val firstTeam = firstOpponent?.opponent ?: continue
+            val secondTeam = secondOpponent?.opponent ?: continue
+            val firstTeamName = firstTeam.name ?: continue
+            val secondTeamName = secondTeam.name ?: continue
 
-            for (opponent in opponents) {
-                val team = opponent.opponent?: continue
-                val name = team.name ?: continue
+            val savedFirstTeam = saveTeam(firstTeam.id.toString(), firstTeamName)
+            val savedSecondTeam = saveTeam(secondTeam.id.toString(), secondTeamName)
 
 
-                println(team.name)
-                println(team.id)
-
-                saveTeam(team.id.toString(), name)
+            saveMatch(match.id.toString(), tournament, savedStage, savedFirstTeam, savedSecondTeam)
 
 
-            }
+
         }
     }
 }

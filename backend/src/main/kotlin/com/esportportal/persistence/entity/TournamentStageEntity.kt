@@ -18,5 +18,8 @@ class TournamentStageEntity {
     var name: String = ""
 
     @Column(name = "stage_type", length = 50)
-    var stage_Type: String? = null
+    var stageType: String? = null
+
+    @Column(name = "external_id", length = 100, unique = true)
+    var externalId: String? = null
 }
