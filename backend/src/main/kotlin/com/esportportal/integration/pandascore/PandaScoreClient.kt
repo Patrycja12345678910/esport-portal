@@ -38,6 +38,14 @@ class PandaScoreClient(
     fun pobierzNadchodzaceMeczeCS2(): List<PandaScoreMatchDto> {
         return pobierzMeczeCS2("/csgo/matches/upcoming")
     }
+    @Retryable(
+        includes = [ResourceAccessException::class,HttpServerErrorException::class],
+        maxRetries = 2,
+        delay = 2000
+    )
+    fun pobierzTrwajaceMeczeCS2(): List<PandaScoreMatchDto> {
+        return pobierzMeczeCS2("/csgo/matches/running")
+    }
 
     private fun odczytajRetryAfter(e: HttpClientErrorException.TooManyRequests
     ): String? {

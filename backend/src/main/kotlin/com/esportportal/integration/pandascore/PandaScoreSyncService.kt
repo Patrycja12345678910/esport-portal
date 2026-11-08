@@ -99,7 +99,8 @@ class PandaScoreSyncService(
     fun syncMatches(){
         val upcomingMatches = pandaScoreClient.pobierzNadchodzaceMeczeCS2()
         val pastMatches = pandaScoreClient.pobierzZakonczoneMeczeCS2()
-        val matches = upcomingMatches + pastMatches
+        val runningMatches = pandaScoreClient.pobierzTrwajaceMeczeCS2()
+        val matches = upcomingMatches + pastMatches + runningMatches
 
         val game = getCs2Game()
 
@@ -148,12 +149,14 @@ class PandaScoreSyncService(
             val matchStatus = match.status ?: "unknown"
             val firstTeamResult = match.results?.find {it.teamId == firstTeam.id}
             val secondTeamResult = match.results?.find {it.teamId == secondTeam.id}
-            val homeScore = if (matchStatus == "finished") {
+
+            val homeScore = if (matchStatus == "finished" || matchStatus == "running") {
                 firstTeamResult?.score
             } else {
                 null
             }
-            val awayScore = if (matchStatus == "finished") {
+
+            val awayScore = if (matchStatus == "finished" || matchStatus == "running") {
                 secondTeamResult?.score
             } else {
                 null
