@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
+import org.springframework.scheduling.annotation.Scheduled
+import org.slf4j.LoggerFactory
 
 @Service
 class PandaScoreSyncService(
@@ -23,7 +25,11 @@ class PandaScoreSyncService(
     private val pandaScoreClient: PandaScoreClient,
     private val tournamentStageRepository: TournamentStageRepository,
     private val matchRepository: MatchRepository
+
 ) {
+
+    private val logger = LoggerFactory.getLogger(PandaScoreSyncService::class.java)
+
     fun findTeam(externalId: String): TeamEntity? {
         return teamRepository.findByExternalId(externalId)
     }
@@ -159,4 +165,17 @@ class PandaScoreSyncService(
 
         }
     }
+
+    //15 minut przerwy od zakończenia jednej synchronizacji do rozpoczęcia następnej
+    @Scheduled(fixedDelay = 900000)
+    fun automatycznaSynchronizacja() {
+        try {
+            logger.info("Rozpoczynam automatyczną synchronizację meczów CS2")
+            syncMatches()
+            logger.info("Synchronizacja zakończona pomyślnie")
+        } catch (e: Exception) {
+            logger.error("Synchronizacja nie powiodła się", e)
+        }
+    }
+
 }
