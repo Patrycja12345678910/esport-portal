@@ -27,4 +27,16 @@ class PandaScoreClient(
             .body(Array<PandaScoreMatchDto>::class.java)
             ?.toList() ?: emptyList()
     }
+    fun pobierzZakonczoneMeczeCS2() : List<PandaScoreMatchDto> {
+        return restClient.get()
+            .uri { builder ->
+                builder.path("/csgo/matches/past")
+                    .queryParam("per_page", 5)
+                    .queryParam("filter[videogame_title]", "cs-2")
+                    .build()
+            }
+            .retrieve()
+            .body(Array<PandaScoreMatchDto>::class.java)
+        ?.toList() ?: emptyList()
+    }
 }

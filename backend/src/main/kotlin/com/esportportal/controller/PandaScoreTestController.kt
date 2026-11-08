@@ -18,6 +18,11 @@ class PandaScoreTestController(
         return pandaScoreClient.pobierzNadchodzaceMeczeCS2()
     }
 
+    @GetMapping("/api/test/pandascore/past")
+    fun testPastMatches(): List<PandaScoreMatchDto> {
+        return pandaScoreClient.pobierzZakonczoneMeczeCS2()
+    }
+
     @PostMapping("/api/test/pandascore/sync")
     fun testSync(): String{
         pandaScoreSyncService.syncMatches()

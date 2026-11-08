@@ -11,6 +11,9 @@ import com.esportportal.persistence.repository.GameRepository
 import com.esportportal.persistence.repository.TournamentStageRepository
 import com.esportportal.persistence.repository.MatchRepository
 import org.springframework.stereotype.Service
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 @Service
 class PandaScoreSyncService(
@@ -62,7 +65,7 @@ class PandaScoreSyncService(
         return tournamentStageRepository.save(tournamentStage)
     }
 
-    fun saveMatch(externalId: String, tournament: TournamentEntity, stage: TournamentStageEntity?, homeTeam: TeamEntity, awayTeam: TeamEntity): MatchEntity {
+    fun saveMatch(externalId: String, tournament: TournamentEntity, stage: TournamentStageEntity?, homeTeam: TeamEntity, awayTeam: TeamEntity, scheduledAt: LocalDateTime?, status: String, homeScore: Int?, awayScore:Int?): MatchEntity {
         val match = matchRepository.findByExternalId(externalId)
             ?: MatchEntity()
 
@@ -71,6 +74,10 @@ class PandaScoreSyncService(
         match.stage = stage
         match.homeTeam = homeTeam
         match.awayTeam = awayTeam
+        match.scheduledAt = scheduledAt
+        match.status = status
+        match.awayScore = awayScore
+        match.homeScore = homeScore
 
         return matchRepository.save(match)
 
@@ -84,7 +91,9 @@ class PandaScoreSyncService(
     }
 
     fun syncMatches(){
-        val matches = pandaScoreClient.pobierzNadchodzaceMeczeCS2()
+        val upcomingMatches = pandaScoreClient.pobierzNadchodzaceMeczeCS2()
+        val pastMatches = pandaScoreClient.pobierzZakonczoneMeczeCS2()
+        val matches = upcomingMatches + pastMatches
 
         val game = getCs2Game()
 
@@ -127,9 +136,25 @@ class PandaScoreSyncService(
             val savedFirstTeam = saveTeam(firstTeam.id.toString(), firstTeamName)
             val savedSecondTeam = saveTeam(secondTeam.id.toString(), secondTeamName)
 
+            val scheduledAtText = match.scheduledAt
+            val scheduledAtInstant = scheduledAtText?.let { Instant.parse(it) }
+            val scheduledAt = scheduledAtInstant?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) }
+            val matchStatus = match.status ?: "unknown"
+            val firstTeamResult = match.results?.find {it.teamId == firstTeam.id}
+            val secondTeamResult = match.results?.find {it.teamId == secondTeam.id}
+            val homeScore = if (matchStatus == "finished") {
+                firstTeamResult?.score
+            } else {
+                null
+            }
+            val awayScore = if (matchStatus == "finished") {
+                secondTeamResult?.score
+            } else {
+                null
+            }
 
-            saveMatch(match.id.toString(), tournament, savedStage, savedFirstTeam, savedSecondTeam)
 
+            saveMatch(match.id.toString(), tournament, savedStage, savedFirstTeam, savedSecondTeam, scheduledAt, matchStatus, homeScore, awayScore)
 
 
         }

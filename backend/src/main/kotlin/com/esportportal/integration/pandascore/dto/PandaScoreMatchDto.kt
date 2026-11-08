@@ -12,5 +12,6 @@ data class PandaScoreMatchDto(
     val tournament: PandaScoreTournamentDto?,
     val opponents: List<PandaScoreOpponentDto>?,
     val league: PandaScoreLeagueDto?,
-    val serie: PandaScoreSerieDto?
+    val serie: PandaScoreSerieDto?,
+    val results: List<PandaScoreResultDto>?
 )

@@ -15,6 +15,7 @@ class SecurityConfig {
                 auth
                     .requestMatchers("/api/test/pandascore").permitAll()
                     .requestMatchers("/api/test/pandascore/sync").permitAll()
+                    .requestMatchers("/api/test/pandascore/past").permitAll()
                     .anyRequest().authenticated()
             }
             .csrf { csrf ->
