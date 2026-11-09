@@ -10,6 +10,10 @@ import org.springframework.resilience.annotation.Retryable
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.HttpServerErrorException
 import org.springframework.web.client.HttpClientErrorException
+import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
+import com.esportportal.integration.pandascore.dto.PandaScoreDeletionDto
+import java.time.Instant
+import kotlin.contracts.Returns
 
 
 @Component
@@ -106,5 +110,85 @@ class PandaScoreClient(
                 }
             }
         }
+    }
+    @Retryable(
+        includes = [ResourceAccessException::class,HttpServerErrorException::class],
+        maxRetries = 2,
+        delay = 2000
+    )
+    fun pobierzNoweMeczeCS2(
+        odKiedy: Instant,
+        strona: Int = 1
+    ): List<PandaScoreIncidentDto> {
+
+        return restClient.get()
+            .uri { builder ->
+                builder.path("/additions")
+                    .queryParam("type", "match")
+                    .queryParam("videogame", "cs-go")
+                    .queryParam("since", odKiedy.toString())
+                    .queryParam("page", strona)
+                    .queryParam("per_page", 100)
+                    .build()
+            }
+            .retrieve()
+            .body(Array<PandaScoreIncidentDto>::class.java)
+            ?.toList() ?: emptyList()
+    }
+    fun pobierzZmianyMeczowCS2(odKiedy: Instant, strona: Int =1) : List<PandaScoreIncidentDto> {
+        return restClient.get()
+            .uri { builder ->
+                builder.path("/changes")
+                    .queryParam("type", "match")
+                    .queryParam("videogame","cs-go")
+                    .queryParam("since",odKiedy.toString())
+                    .queryParam("page",strona)
+                    .queryParam("per_page",100)
+                    .build()
+            }
+            .retrieve()
+            .body(Array<PandaScoreIncidentDto>::class.java)
+        ?.toList() ?: emptyList()
+
+    }
+    fun pobierzSuroweIncydenty(odKiedy: Instant): String {
+        return restClient.get()
+            .uri { builder ->
+                builder.path("/incidents")
+                    .queryParam("type", "match")
+                    .queryParam("videogame", "cs-go")
+                    .queryParam("since", odKiedy.toString())
+                    .queryParam("page", 1)
+                    .queryParam("per_page", 5)
+                    .build()
+            }
+            .retrieve()
+            .body(String::class.java) ?: "[]"
+    }
+
+    fun pobierzUsunieteMeczeCS2(
+        odKiedy: Instant,
+        strona: Int = 1
+    ): List<PandaScoreDeletionDto> {
+
+        return restClient.get()
+            .uri { builder ->
+                builder.path("/deletions")
+                    .queryParam("type", "match")
+                    .queryParam("videogame", "cs-go")
+                    .queryParam("since", odKiedy.toString())
+                    .queryParam("page", strona)
+                    .queryParam("per_page", 100)
+                    .build()
+            }
+            .retrieve()
+            .body(Array<PandaScoreDeletionDto>::class.java)
+            ?.toList() ?: emptyList()
+    }
+    fun pobierzMeczPoId(id: Long): PandaScoreMatchDto? {
+        return restClient.get()
+            .uri("/matches/{id}", id)
+            .retrieve()
+            .body(PandaScoreMatchDto::class.java)
     }
 }

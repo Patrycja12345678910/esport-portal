@@ -1,6 +1,6 @@
 package com.esportportal.persistence.entity
 import java.time.LocalDateTime
-
+import java.time.Instant
 import jakarta.persistence.*
 
 @Entity
@@ -41,4 +41,7 @@ class MatchEntity {
 
     @Column(name = "external_id", length = 100)
     var externalId: String? = null
+
+    @Column(name = "deleted_at")
+    var deletedAt: Instant? = null
 }

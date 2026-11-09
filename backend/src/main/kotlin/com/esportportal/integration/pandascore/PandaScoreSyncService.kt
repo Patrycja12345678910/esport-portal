@@ -10,12 +10,16 @@ import com.esportportal.persistence.entity.TournamentStageEntity
 import com.esportportal.persistence.repository.GameRepository
 import com.esportportal.persistence.repository.TournamentStageRepository
 import com.esportportal.persistence.repository.MatchRepository
+import com.esportportal.persistence.repository.SyncStateRepository
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import org.springframework.scheduling.annotation.Scheduled
 import org.slf4j.LoggerFactory
+import com.esportportal.persistence.entity.SyncStateEntity
+import com.esportportal.integration.pandascore.dto.PandaScoreMatchDto
+import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
 
 @Service
 class PandaScoreSyncService(
@@ -24,7 +28,8 @@ class PandaScoreSyncService(
     private val gameRepository: GameRepository,
     private val pandaScoreClient: PandaScoreClient,
     private val tournamentStageRepository: TournamentStageRepository,
-    private val matchRepository: MatchRepository
+    private val matchRepository: MatchRepository,
+    private val syncStateRepository: SyncStateRepository
 
 ) {
 
@@ -76,6 +81,7 @@ class PandaScoreSyncService(
             ?: MatchEntity()
 
         match.externalId = externalId
+        match.deletedAt = null
         match.tournament = tournament
         match.stage = stage
         match.homeTeam = homeTeam
@@ -88,6 +94,13 @@ class PandaScoreSyncService(
         return matchRepository.save(match)
 
     }
+    fun markMatchAsDeleted(externalId: String) {
+        val match = matchRepository.findByExternalId(externalId)
+            ?: return
+
+        match.deletedAt = Instant.now()
+        matchRepository.save(match)
+    }
 
     fun getCs2Game(): GameEntity {
         val game = gameRepository.findBySlug("cs2")
@@ -95,78 +108,200 @@ class PandaScoreSyncService(
 
         return game
     }
-
-    fun syncMatches(){
-        val upcomingMatches = pandaScoreClient.pobierzNadchodzaceMeczeCS2()
-        val pastMatches = pandaScoreClient.pobierzZakonczoneMeczeCS2()
-        val runningMatches = pandaScoreClient.pobierzTrwajaceMeczeCS2()
-        val matches = upcomingMatches + pastMatches + runningMatches
-
+    fun processMatch(match: PandaScoreMatchDto): Boolean {
         val game = getCs2Game()
 
-        for (match in matches) {
-            println(match.name)
+        val serie = match.serie
+        val serieId = serie?.id ?: return false
 
-            val league = match.league
-            val serie = match.serie
-            val serieId = serie?.id ?: continue
+        val stage = match.tournament
+        val stageId = stage?.id ?: return false
+        val stageName = stage.name ?: return false
 
-            val leagueName = league?.name?.takeIf { it.isNotBlank() } ?: "Nieznana liga"
+        val opponents = match.opponents ?: return false
+        val firstTeam = opponents.getOrNull(0)?.opponent ?: return false
+        val secondTeam = opponents.getOrNull(1)?.opponent ?: return false
 
-            val tournamentName = if(serie?.name.isNullOrBlank()) {
-                leagueName
-            } else {
-                "$leagueName ${serie?.name}"
-            }
+        val firstTeamName = firstTeam.name ?: return false
+        val secondTeamName = secondTeam.name ?: return false
 
-            println(league?.name)
-            println(serie?.name)
+        val leagueName = match.league?.name
+            ?.takeIf { it.isNotBlank() } ?: "Nieznana liga"
 
-
-            val tournament = saveTournament(serieId.toString(), tournamentName, game)
-
-            val stage = match.tournament
-            val stageId = stage?.id ?: continue
-
-            val stageName = stage.name ?: continue
-
-            val savedStage = saveStage(stageId.toString(), stageName, tournament )
-
-            val opponents = match.opponents ?: emptyList()
-            val firstOpponent = opponents.getOrNull(0)
-            val secondOpponent = opponents.getOrNull(1)
-            val firstTeam = firstOpponent?.opponent ?: continue
-            val secondTeam = secondOpponent?.opponent ?: continue
-            val firstTeamName = firstTeam.name ?: continue
-            val secondTeamName = secondTeam.name ?: continue
-
-            val savedFirstTeam = saveTeam(firstTeam.id.toString(), firstTeamName)
-            val savedSecondTeam = saveTeam(secondTeam.id.toString(), secondTeamName)
-
-            val scheduledAtText = match.scheduledAt
-            val scheduledAtInstant = scheduledAtText?.let { Instant.parse(it) }
-            val scheduledAt = scheduledAtInstant?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) }
-            val matchStatus = match.status ?: "unknown"
-            val firstTeamResult = match.results?.find {it.teamId == firstTeam.id}
-            val secondTeamResult = match.results?.find {it.teamId == secondTeam.id}
-
-            val homeScore = if (matchStatus == "finished" || matchStatus == "running") {
-                firstTeamResult?.score
-            } else {
-                null
-            }
-
-            val awayScore = if (matchStatus == "finished" || matchStatus == "running") {
-                secondTeamResult?.score
-            } else {
-                null
-            }
-
-
-            saveMatch(match.id.toString(), tournament, savedStage, savedFirstTeam, savedSecondTeam, scheduledAt, matchStatus, homeScore, awayScore)
-
-
+        val tournamentName = if (serie.name.isNullOrBlank()) {
+            leagueName
+        } else {
+            "$leagueName ${serie.name}"
         }
+
+        val tournament = saveTournament(
+            serieId.toString(),
+            tournamentName,
+            game
+        )
+
+        val savedStage = saveStage(
+            stageId.toString(),
+            stageName,
+            tournament
+        )
+
+        val savedFirstTeam = saveTeam(firstTeam.id.toString(), firstTeamName)
+        val savedSecondTeam = saveTeam(secondTeam.id.toString(), secondTeamName)
+
+        val scheduledAt = match.scheduledAt?.let {
+            LocalDateTime.ofInstant(Instant.parse(it), ZoneOffset.UTC)
+        }
+
+        val matchStatus = match.status ?: "unknown"
+
+        val homeScore = match.results
+            ?.find { it.teamId == firstTeam.id }
+            ?.score
+            ?.takeIf { matchStatus == "finished" || matchStatus == "running" }
+
+        val awayScore = match.results
+            ?.find { it.teamId == secondTeam.id }
+            ?.score
+            ?.takeIf { matchStatus == "finished" || matchStatus == "running" }
+
+        saveMatch(
+            match.id.toString(),
+            tournament,
+            savedStage,
+            savedFirstTeam,
+            savedSecondTeam,
+            scheduledAt,
+            matchStatus,
+            homeScore,
+            awayScore
+        )
+
+        return true
+    }
+    fun syncSingleMatch(id: Long): Boolean {
+        val match = pandaScoreClient.pobierzMeczPoId(id)
+            ?: return false
+
+        return processMatch(match)
+    }
+
+    fun syncMatches() {
+        val czasRozpoczecia = Instant.now()
+
+        val source = "pandascore_cs2"
+        val syncState = syncStateRepository.findBySource(source)
+            ?: SyncStateEntity()
+        syncState.source = source
+
+        val ostatniaSynchronizacja = syncState.lastSuccessfulSync
+        logger.info("Ostatnia synchronizacja: $ostatniaSynchronizacja")
+
+        val matches: List<PandaScoreMatchDto> =
+            if (ostatniaSynchronizacja != null) {
+
+                val incidents = mutableListOf<PandaScoreIncidentDto>()
+                var strona = 1
+
+                while (true) {
+                    val pobraneIncydenty = pandaScoreClient.pobierzZmianyMeczowCS2(
+                        ostatniaSynchronizacja,
+                        strona
+                    )
+
+                    incidents.addAll(pobraneIncydenty)
+                    pobraneIncydenty.forEach { incident ->
+                        logger.info(
+                            "Pobrano zmianę meczu: ID=${incident.id}, typ=${incident.changeType}, modifiedAt=${incident.modifiedAt}"
+                        )
+                    }
+                    logger.info("Changes, strona $strona: ${pobraneIncydenty.size} incydentów")
+
+                    if (pobraneIncydenty.size < 100) {
+                        break
+                    }
+
+                    strona++
+                }
+                var stronaNowych = 1
+
+                while (true) {
+                    val noweMecze = pandaScoreClient.pobierzNoweMeczeCS2(
+                        ostatniaSynchronizacja,
+                        stronaNowych
+                    )
+
+                    incidents.addAll(noweMecze)
+                    logger.info("Additions, strona $stronaNowych: ${noweMecze.size} incydentów")
+
+                    if (noweMecze.size < 100) {
+                        break
+                    }
+
+                    stronaNowych++
+                }
+
+                incidents.mapNotNull { incident ->
+                    if (incident.changeType == "update" || incident.changeType == "creation") {
+                        incident.`object`
+                    } else {
+                        null
+                    }
+                }
+            } else {
+                val upcomingMatches = pandaScoreClient.pobierzNadchodzaceMeczeCS2()
+                val pastMatches = pandaScoreClient.pobierzZakonczoneMeczeCS2()
+                val runningMatches = pandaScoreClient.pobierzTrwajaceMeczeCS2()
+
+                upcomingMatches + pastMatches + runningMatches
+            }
+
+        logger.info("Synchronizacja: pobrano ${matches.size} meczów")
+
+        logger.info(
+            "Czy pobrano mecz 1795395: ${matches.any { it.id == 1795395L }}"
+        )
+
+        var pominietoMecze = false
+
+        for (match in matches) {
+            val zapisano = processMatch(match)
+
+            if (!zapisano) {
+                pominietoMecze = true
+                logger.warn("Pominięto mecz o ID=${match.id} z powodu niepełnych danych")
+            }
+        }
+        if (ostatniaSynchronizacja != null) {
+            var stronaUsuniec = 1
+
+            while (true) {
+                val usunieteMecze = pandaScoreClient.pobierzUsunieteMeczeCS2(
+                    ostatniaSynchronizacja,
+                    stronaUsuniec
+                )
+
+                for (incident in usunieteMecze) {
+                    if (incident.type == "match" && incident.changeType == "deletion") {
+                        markMatchAsDeleted(incident.id.toString())
+                    }
+                }
+
+                if (usunieteMecze.size < 100) {
+                    break
+                }
+
+                stronaUsuniec++
+            }
+        }
+        if (pominietoMecze) {
+            throw IllegalStateException(
+                "Pominięto mecze z niepełnymi danymi. Synchronizacja nie została w pełni zakończona."
+            )
+        }
+
+        syncState.lastSuccessfulSync = czasRozpoczecia
+        syncStateRepository.save(syncState)
     }
 
     //15 minut przerwy od zakończenia jednej synchronizacji do rozpoczęcia następnej
