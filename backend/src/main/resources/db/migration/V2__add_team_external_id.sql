@@ -1,0 +1,2 @@
+ALTER TABLE teams
+ADD COLUMN external_id VARCHAR(100) UNIQUE;
