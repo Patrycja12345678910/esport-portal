@@ -3,6 +3,19 @@
 Aplikacja webowa do prezentowania i analizowania danych dotyczących
 rozgrywek esportowych dla gier Counter-Strike 2 oraz League of Legends.
 
+## Spis treści
+
+- [Technologie](#technologie)
+- [Zewnętrzne API](#zewnętrzne-api)
+- [Projekt bazy danych](#projekt-bazy-danych)
+- [Docker](#docker)
+- [Konfiguracja](#konfiguracja)
+- [Aktualny stan projektu](#aktualny-stan-projektu)
+    - [Etap 1 – analiza i przygotowanie projektu](#etap-1--analiza-i-przygotowanie-projektu)
+    - [Etap 2 – integracja i synchronizacja danych](#etap-2--integracja-i-synchronizacja-danych)
+- [Dalsze prace](#dalsze-prace)
+
+
 ## Technologie
 
 ### Backend
@@ -101,14 +114,39 @@ W ramach pierwszego etapu wykonano:
 - [x] uruchomienie oraz przetestowanie komunikacji backendu z bazą danych,
 - [x] przygotowanie VPS i instalację Docker oraz Docker Compose.
 
-## Kolejny etap
-
 ### Etap 2 – integracja i synchronizacja danych
 
-W kolejnym etapie:
+W ramach drugiego etapu wykonano:
 
-- integracja z PandaScore API,
-- integracja z Riot Games API,
-- implementacja mechanizmu synchronizacji danych,
-- normalizacja danych pochodzących z różnych źródeł,
-- deduplikacja danych.
+- integrację z PandaScore API dla gry Counter-Strike 2,
+- utworzenie klienta API z wykorzystaniem `RestClient`,
+- pobieranie meczów nadchodzących, trwających i zakończonych,
+- przygotowanie klas DTO do odbierania danych z API,
+- przetwarzanie i zapisywanie informacji o meczach, drużynach, turniejach i etapach turniejów w PostgreSQL,
+- dodanie aktualizacji istniejących rekordów na podstawie identyfikatorów zewnętrznych (`externalId`),
+- implementację synchronizacji przyrostowej, pobierającej nowe, zmienione i usunięte rekordy,
+- zapisywanie czasu ostatniej pomyślnej synchronizacji w bazie danych,
+- uruchomienie automatycznej synchronizacji danych za pomocą `@Scheduled`,
+- dodanie podstawowego logowania przebiegu synchronizacji,
+- obsługę meczów, dla których nie są jeszcze znane drużyny,
+- dodanie migracji bazy danych za pomocą Flyway,
+- konfigurację timeoutów dla zapytań do API,
+- dodanie mechanizmu ponawiania nieudanych zapytań (`retry`),
+- obsługę błędu HTTP 429 oraz nagłówka `Retry-After`,
+- przygotowanie rate limitera ograniczającego częstotliwość zapytań,
+- dodanie mechanizmu circuit breaker z wykorzystaniem biblioteki Resilience4j,
+- przygotowanie testów synchronizacji oraz wybranych mechanizmów obsługi błędów API.
+
+
+
+**Do dokończenia w ramach drugiego etapu pozostało:**
+
+- rozszerzenie integracji PandaScore API o grę League of Legends,
+- dodanie Riot Games API jako drugiego, uzupełniającego źródła danych,
+- implementacja normalizacji i deduplikacji wspólnych danych pochodzących z dwóch źródeł,
+- przygotowanie mapowania identyfikatorów zewnętrznych na identyfikatory wewnętrzne aplikacji,
+- dopracowanie harmonogramu synchronizacji dla różnych rodzajów meczów,
+
+
+## Kolejny etap
+
