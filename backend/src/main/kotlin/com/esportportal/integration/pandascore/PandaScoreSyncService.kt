@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory
 import com.esportportal.persistence.entity.SyncStateEntity
 import com.esportportal.integration.pandascore.dto.PandaScoreMatchDto
 import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
+import kotlin.math.log
+import org.springframework.context.annotation.Profile
 
 @Service
 class PandaScoreSyncService(
@@ -76,7 +78,7 @@ class PandaScoreSyncService(
         return tournamentStageRepository.save(tournamentStage)
     }
 
-    fun saveMatch(externalId: String, tournament: TournamentEntity, stage: TournamentStageEntity?, homeTeam: TeamEntity, awayTeam: TeamEntity, scheduledAt: LocalDateTime?, status: String, homeScore: Int?, awayScore:Int?): MatchEntity {
+    fun saveMatch(externalId: String, tournament: TournamentEntity, stage: TournamentStageEntity?, homeTeam: TeamEntity?, awayTeam: TeamEntity?, scheduledAt: LocalDateTime?, status: String, homeScore: Int?, awayScore:Int?): MatchEntity {
         val match = matchRepository.findByExternalId(externalId)
             ?: MatchEntity()
 
@@ -112,18 +114,40 @@ class PandaScoreSyncService(
         val game = getCs2Game()
 
         val serie = match.serie
-        val serieId = serie?.id ?: return false
+        val serieId = serie?.id
+
+        if (serieId == null) {
+            logger.warn("Brakuje serii w meczu ID=${match.id}")
+            return false
+        }
 
         val stage = match.tournament
-        val stageId = stage?.id ?: return false
-        val stageName = stage.name ?: return false
+        val stageId = stage?.id
 
-        val opponents = match.opponents ?: return false
-        val firstTeam = opponents.getOrNull(0)?.opponent ?: return false
-        val secondTeam = opponents.getOrNull(1)?.opponent ?: return false
+        if(stageId == null) {
+            logger.warn("Brakuje etapu w meczu ID=${match.id}")
+            return false
+        }
 
-        val firstTeamName = firstTeam.name ?: return false
-        val secondTeamName = secondTeam.name ?: return false
+        val stageName = stage.name
+
+        if(stageName == null) {
+            logger.warn("Brakuje nazwy etapu w meczu ID=${match.id}")
+            return false
+        }
+
+        val opponents = match.opponents
+
+        if(opponents == null) {
+            logger.warn("Brakuje listy drużyn w meczu ID=${match.id}")
+            return false
+        }
+
+        val firstTeam = opponents.getOrNull(0)?.opponent
+
+
+        val secondTeam = opponents.getOrNull(1)?.opponent
+
 
         val leagueName = match.league?.name
             ?.takeIf { it.isNotBlank() } ?: "Nieznana liga"
@@ -146,8 +170,18 @@ class PandaScoreSyncService(
             tournament
         )
 
-        val savedFirstTeam = saveTeam(firstTeam.id.toString(), firstTeamName)
-        val savedSecondTeam = saveTeam(secondTeam.id.toString(), secondTeamName)
+        val savedFirstTeam = firstTeam?.let { team ->
+            team.name?.let { name ->
+                saveTeam(team.id.toString(), name)
+            }
+        }
+
+
+        val savedSecondTeam = secondTeam?.let { team ->
+            team.name?.let { name ->
+                saveTeam(team.id.toString(), name)
+            }
+        }
 
         val scheduledAt = match.scheduledAt?.let {
             LocalDateTime.ofInstant(Instant.parse(it), ZoneOffset.UTC)
@@ -155,15 +189,21 @@ class PandaScoreSyncService(
 
         val matchStatus = match.status ?: "unknown"
 
-        val homeScore = match.results
-            ?.find { it.teamId == firstTeam.id }
-            ?.score
-            ?.takeIf { matchStatus == "finished" || matchStatus == "running" }
+        val homeScore = if (firstTeam != null &&
+            (matchStatus == "finished" || matchStatus == "running")
+        ) {
+            match.results?.find { it.teamId == firstTeam.id }?.score
+        } else {
+            null
+        }
 
-        val awayScore = match.results
-            ?.find { it.teamId == secondTeam.id }
-            ?.score
-            ?.takeIf { matchStatus == "finished" || matchStatus == "running" }
+        val awayScore = if (secondTeam != null &&
+            (matchStatus == "finished" || matchStatus == "running")
+        ) {
+            match.results?.find { it.teamId == secondTeam.id }?.score
+        } else {
+            null
+        }
 
         saveMatch(
             match.id.toString(),
@@ -185,7 +225,7 @@ class PandaScoreSyncService(
 
         return processMatch(match)
     }
-
+    @Synchronized
     fun syncMatches() {
         val czasRozpoczecia = Instant.now()
 
@@ -263,15 +303,19 @@ class PandaScoreSyncService(
         )
 
         var pominietoMecze = false
+        var licznik = 0
 
         for (match in matches) {
             val zapisano = processMatch(match)
 
             if (!zapisano) {
                 pominietoMecze = true
+                licznik++
                 logger.warn("Pominięto mecz o ID=${match.id} z powodu niepełnych danych")
             }
         }
+        logger.info("Licznik: $licznik")
+
         if (ostatniaSynchronizacja != null) {
             var stronaUsuniec = 1
 
@@ -280,6 +324,7 @@ class PandaScoreSyncService(
                     ostatniaSynchronizacja,
                     stronaUsuniec
                 )
+                logger.info("Liczba usuniętych meczów na stronie: ${usunieteMecze.size}")
 
                 for (incident in usunieteMecze) {
                     if (incident.type == "match" && incident.changeType == "deletion") {
@@ -304,6 +349,7 @@ class PandaScoreSyncService(
         syncStateRepository.save(syncState)
     }
 
+    @Profile("!test")
     //15 minut przerwy od zakończenia jednej synchronizacji do rozpoczęcia następnej
     @Scheduled(fixedDelay = 900000)
     fun automatycznaSynchronizacja() {

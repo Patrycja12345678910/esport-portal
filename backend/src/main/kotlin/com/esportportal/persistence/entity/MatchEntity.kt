@@ -20,11 +20,11 @@ class MatchEntity {
     var stage: TournamentStageEntity? = null
 
     @ManyToOne
-    @JoinColumn(name = "home_team_id", nullable = false)
+    @JoinColumn(name = "home_team_id", nullable = true)
         var homeTeam: TeamEntity? = null
 
     @ManyToOne
-    @JoinColumn(name = "away_team_id", nullable = false)
+    @JoinColumn(name = "away_team_id", nullable = true)
     var awayTeam: TeamEntity? = null
 
     @Column(name = "scheduled_at")

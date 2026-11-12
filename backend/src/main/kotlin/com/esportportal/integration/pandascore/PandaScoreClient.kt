@@ -14,11 +14,14 @@ import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
 import com.esportportal.integration.pandascore.dto.PandaScoreDeletionDto
 import java.time.Instant
 import kotlin.contracts.Returns
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
+
 
 
 @Component
 class PandaScoreClient(
     restClientBuilder: RestClient.Builder,
+    private val rateLimiter: PandaScoreRateLimiter,
     @Value("\${PANDASCORE_API_TOKEN}") private val apiToken: String,
     @Value("\${PANDASCORE_BASE_URL:https://api.pandascore.co}") private val baseUrl: String
 
@@ -31,8 +34,12 @@ class PandaScoreClient(
         .baseUrl(baseUrl)
         .defaultHeader("Authorization", "Bearer $apiToken")
         .requestFactory(requestFactory)
+        .requestInterceptor { request, body, execution ->
+            rateLimiter.czekajNaMozliwoscZapytania()
+            execution.execute(request, body)
+        }
         .build()
-
+    @CircuitBreaker(name = "pandascore")
     @Retryable(
         includes = [ResourceAccessException::class,HttpServerErrorException::class],
         maxRetries = 2,
@@ -42,6 +49,8 @@ class PandaScoreClient(
     fun pobierzNadchodzaceMeczeCS2(): List<PandaScoreMatchDto> {
         return pobierzMeczeCS2("/csgo/matches/upcoming")
     }
+
+    @CircuitBreaker(name = "pandascore")
     @Retryable(
         includes = [ResourceAccessException::class,HttpServerErrorException::class],
         maxRetries = 2,
@@ -67,6 +76,7 @@ class PandaScoreClient(
         return sekundy.coerceAtMost(60) * 1000
     }
 
+    @CircuitBreaker(name = "pandascore")
     @Retryable(
         includes = [ResourceAccessException::class,HttpServerErrorException::class],
         maxRetries = 2,
@@ -111,6 +121,7 @@ class PandaScoreClient(
             }
         }
     }
+    @CircuitBreaker(name = "pandascore")
     @Retryable(
         includes = [ResourceAccessException::class,HttpServerErrorException::class],
         maxRetries = 2,
@@ -135,6 +146,15 @@ class PandaScoreClient(
             .body(Array<PandaScoreIncidentDto>::class.java)
             ?.toList() ?: emptyList()
     }
+    @CircuitBreaker(name = "pandascore")
+    @Retryable(
+        includes = [
+            ResourceAccessException::class,
+            HttpServerErrorException::class
+        ],
+        maxRetries = 2,
+        delay = 2000
+    )
     fun pobierzZmianyMeczowCS2(odKiedy: Instant, strona: Int =1) : List<PandaScoreIncidentDto> {
         return restClient.get()
             .uri { builder ->
@@ -151,6 +171,8 @@ class PandaScoreClient(
         ?.toList() ?: emptyList()
 
     }
+
+    @CircuitBreaker(name = "pandascore")
     fun pobierzSuroweIncydenty(odKiedy: Instant): String {
         return restClient.get()
             .uri { builder ->
@@ -165,7 +187,15 @@ class PandaScoreClient(
             .retrieve()
             .body(String::class.java) ?: "[]"
     }
-
+    @CircuitBreaker(name = "pandascore")
+    @Retryable(
+        includes = [
+            ResourceAccessException::class,
+            HttpServerErrorException::class
+        ],
+        maxRetries = 2,
+        delay = 2000
+    )
     fun pobierzUsunieteMeczeCS2(
         odKiedy: Instant,
         strona: Int = 1
@@ -185,6 +215,8 @@ class PandaScoreClient(
             .body(Array<PandaScoreDeletionDto>::class.java)
             ?.toList() ?: emptyList()
     }
+
+    @CircuitBreaker(name = "pandascore")
     fun pobierzMeczPoId(id: Long): PandaScoreMatchDto? {
         return restClient.get()
             .uri("/matches/{id}", id)

@@ -40,6 +40,7 @@ class PandaScoreClientTest {
 
         val klient = PandaScoreClient(
             RestClient.builder(),
+            PandaScoreRateLimiter(),
             "test-token",
             adresSerwera
         )
@@ -73,6 +74,7 @@ class PandaScoreClientTest {
 
             val klient = PandaScoreClient(
                 RestClient.builder(),
+                PandaScoreRateLimiter(),
                 "test-token",
                 adresSerwera
             )
