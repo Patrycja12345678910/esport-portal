@@ -16,6 +16,8 @@ class SecurityConfig {
                     .requestMatchers("/api/test/pandascore", "/api/test/pandascore/incidents","/api/test/pandascore/incidents/raw","/api/test/pandascore/additions","/api/test/pandascore/match","/api/test/pandascore/changes/check","/api/test/pandascore/match/sync").permitAll()
                     .requestMatchers("/api/test/pandascore/sync").permitAll()
                     .requestMatchers("/api/test/pandascore/past").permitAll()
+                    .requestMatchers("/api/test/pandascore/running").permitAll()
+                    .requestMatchers("/api/test/pandascore/deletions").permitAll()
                     .anyRequest().authenticated()
             }
             .csrf { csrf ->

@@ -104,14 +104,27 @@ class PandaScoreSyncService(
         matchRepository.save(match)
     }
 
-    fun getCs2Game(): GameEntity {
-        val game = gameRepository.findBySlug("cs2")
-            ?: error("Nie znaleziono gry CS2")
+    fun getGame(slug: String): GameEntity {
+        return gameRepository.findBySlug(slug)
+            ?: error("Nie znaleziono gry: $slug")
 
-        return game
     }
-    fun processMatch(match: PandaScoreMatchDto): Boolean {
-        val game = getCs2Game()
+    fun processMatch(match: PandaScoreMatchDto, gameSlug: String): Boolean {
+        val game = getGame(gameSlug)
+        val expectedApiSlug = if(gameSlug == "cs2") {
+            "cs-go"
+        } else {
+            "league-of-legends"
+        }
+
+        if(match.videogame?.slug != expectedApiSlug) {
+            logger.warn("Mecz ${match.id} należy do innej gry")
+            return false
+        }
+
+        logger.info(
+            "Mecz ID=${match.id}, oczekiwana gra=$gameSlug, gra z API=${match.videogame?.slug}"
+        )
 
         val serie = match.serie
         val serieId = serie?.id
@@ -219,17 +232,17 @@ class PandaScoreSyncService(
 
         return true
     }
-    fun syncSingleMatch(id: Long): Boolean {
+    fun syncSingleMatch(id: Long, gameSlug: String): Boolean {
         val match = pandaScoreClient.pobierzMeczPoId(id)
             ?: return false
 
-        return processMatch(match)
+        return processMatch(match,gameSlug)
     }
     @Synchronized
-    fun syncMatches() {
+    fun syncMatches(gameSlug: String = "cs2") {
         val czasRozpoczecia = Instant.now()
 
-        val source = "pandascore_cs2"
+        val source = "pandascore_$gameSlug"
         val syncState = syncStateRepository.findBySource(source)
             ?: SyncStateEntity()
         syncState.source = source
@@ -244,8 +257,9 @@ class PandaScoreSyncService(
                 var strona = 1
 
                 while (true) {
-                    val pobraneIncydenty = pandaScoreClient.pobierzZmianyMeczowCS2(
+                    val pobraneIncydenty = pandaScoreClient.pobierzZmianyMeczow(
                         ostatniaSynchronizacja,
+                        gameSlug,
                         strona
                     )
 
@@ -266,8 +280,9 @@ class PandaScoreSyncService(
                 var stronaNowych = 1
 
                 while (true) {
-                    val noweMecze = pandaScoreClient.pobierzNoweMeczeCS2(
+                    val noweMecze = pandaScoreClient.pobierzNoweMecze(
                         ostatniaSynchronizacja,
+                        gameSlug,
                         stronaNowych
                     )
 
@@ -289,9 +304,9 @@ class PandaScoreSyncService(
                     }
                 }
             } else {
-                val upcomingMatches = pandaScoreClient.pobierzNadchodzaceMeczeCS2()
-                val pastMatches = pandaScoreClient.pobierzZakonczoneMeczeCS2()
-                val runningMatches = pandaScoreClient.pobierzTrwajaceMeczeCS2()
+                val upcomingMatches = pandaScoreClient.pobierzNadchodzaceMecze(gameSlug)
+                val pastMatches = pandaScoreClient.pobierzZakonczoneMecze(gameSlug)
+                val runningMatches = pandaScoreClient.pobierzTrwajaceMecze(gameSlug)
 
                 upcomingMatches + pastMatches + runningMatches
             }
@@ -306,12 +321,12 @@ class PandaScoreSyncService(
         var licznik = 0
 
         for (match in matches) {
-            val zapisano = processMatch(match)
+            val zapisano = processMatch(match, gameSlug)
 
             if (!zapisano) {
                 pominietoMecze = true
                 licznik++
-                logger.warn("Pominięto mecz o ID=${match.id} z powodu niepełnych danych")
+                logger.warn("Nie udało się przetworzyć meczu ID=${match.id}, gra=$gameSlug")
             }
         }
         logger.info("Licznik: $licznik")
@@ -320,8 +335,9 @@ class PandaScoreSyncService(
             var stronaUsuniec = 1
 
             while (true) {
-                val usunieteMecze = pandaScoreClient.pobierzUsunieteMeczeCS2(
+                val usunieteMecze = pandaScoreClient.pobierzUsunieteMecze(
                     ostatniaSynchronizacja,
+                    gameSlug,
                     stronaUsuniec
                 )
                 logger.info("Liczba usuniętych meczów na stronie: ${usunieteMecze.size}")
@@ -355,7 +371,7 @@ class PandaScoreSyncService(
     fun automatycznaSynchronizacja() {
         try {
             logger.info("Rozpoczynam automatyczną synchronizację meczów CS2")
-            syncMatches()
+            syncMatches("cs2")
             logger.info("Synchronizacja zakończona pomyślnie")
         } catch (e: Exception) {
             logger.error("Synchronizacja nie powiodła się", e)
