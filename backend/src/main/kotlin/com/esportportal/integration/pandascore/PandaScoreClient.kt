@@ -46,13 +46,13 @@ class PandaScoreClient(
         delay = 2000
 
     )
-    fun pobierzNadchodzaceMecze(gameSlug: String): List<PandaScoreMatchDto> {
+    fun pobierzNadchodzaceMecze(gameSlug: String, strona: Int = 1): List<PandaScoreMatchDto> {
         val apiGame = if(gameSlug == "cs2") {
            "csgo"
         } else {
             "lol"
         }
-        return pobierzMecze("/$apiGame/matches/upcoming", gameSlug)
+        return pobierzMecze("/$apiGame/matches/upcoming", gameSlug, strona)
     }
 
     @CircuitBreaker(name = "pandascore")
@@ -61,13 +61,13 @@ class PandaScoreClient(
         maxRetries = 2,
         delay = 2000
     )
-    fun pobierzTrwajaceMecze(gameSlug: String): List<PandaScoreMatchDto> {
+    fun pobierzTrwajaceMecze(gameSlug: String, strona: Int = 1): List<PandaScoreMatchDto> {
         val apiGame = if(gameSlug == "cs2") {
             "csgo"
         } else {
             "lol"
         }
-        return pobierzMecze("/$apiGame/matches/running", gameSlug)
+        return pobierzMecze("/$apiGame/matches/running", gameSlug, strona)
     }
 
     private fun odczytajRetryAfter(e: HttpClientErrorException.TooManyRequests
@@ -92,23 +92,18 @@ class PandaScoreClient(
         maxRetries = 2,
         delay = 2000
     )
-    fun pobierzZakonczoneMecze(gameSlug: String) : List<PandaScoreMatchDto> {
+    fun pobierzZakonczoneMecze(gameSlug: String, strona: Int = 1) : List<PandaScoreMatchDto> {
         val apiGame = if (gameSlug == "cs2") {
             "csgo"
         } else {
             "lol"
         }
-        return pobierzMecze("/$apiGame/matches/past", gameSlug)
+        return pobierzMecze("/$apiGame/matches/past", gameSlug, strona)
     }
 
-    private fun pobierzMecze(sciezka: String, gameSlug: String): List<PandaScoreMatchDto> {
+    private fun pobierzMecze(sciezka: String, gameSlug: String, strona: Int = 1): List<PandaScoreMatchDto> {
         var liczbaProb = 0
 
-        val apiGameFilter = if(gameSlug == "cs2") {
-            "cs-2"
-        } else {
-            "lol"
-        }
 
         while (true) {
             liczbaProb += 1
@@ -118,7 +113,7 @@ class PandaScoreClient(
                     .uri { builder ->
                         builder.path(sciezka)
                             .queryParam("per_page", 5)
-
+                            .queryParam("page", strona)
                             .build()
                     }
                     .retrieve()
@@ -142,6 +137,7 @@ class PandaScoreClient(
             }
         }
     }
+
     @CircuitBreaker(name = "pandascore")
     @Retryable(
         includes = [ResourceAccessException::class,HttpServerErrorException::class],

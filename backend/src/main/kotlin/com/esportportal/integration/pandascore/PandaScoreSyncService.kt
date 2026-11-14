@@ -33,6 +33,7 @@ class PandaScoreSyncService(
     private val matchRepository: MatchRepository,
     private val syncStateRepository: SyncStateRepository
 
+
 ) {
 
     private val logger = LoggerFactory.getLogger(PandaScoreSyncService::class.java)
@@ -143,21 +144,12 @@ class PandaScoreSyncService(
         }
 
         val stageName = stage.name
+            ?.takeIf { it.isNotBlank() } ?: "Nieznany etap"
 
-        if(stageName == null) {
-            logger.warn("Brakuje nazwy etapu w meczu ID=${match.id}")
-            return false
-        }
 
-        val opponents = match.opponents
-
-        if(opponents == null) {
-            logger.warn("Brakuje listy drużyn w meczu ID=${match.id}")
-            return false
-        }
+        val opponents = match.opponents?: emptyList()
 
         val firstTeam = opponents.getOrNull(0)?.opponent
-
 
         val secondTeam = opponents.getOrNull(1)?.opponent
 
@@ -196,8 +188,12 @@ class PandaScoreSyncService(
             }
         }
 
-        val scheduledAt = match.scheduledAt?.let {
-            LocalDateTime.ofInstant(Instant.parse(it), ZoneOffset.UTC)
+        val scheduledAt = match.scheduledAt?.let { data ->
+            runCatching {
+                LocalDateTime.ofInstant(Instant.parse(data), ZoneOffset.UTC)
+            }.onFailure { exception ->
+                logger.warn("Nieprawidłowa data meczu ID=${match.id}: $data", exception)
+            }.getOrNull()
         }
 
         val matchStatus = match.status ?: "unknown"
@@ -238,6 +234,83 @@ class PandaScoreSyncService(
 
         return processMatch(match,gameSlug)
     }
+
+// Pobiera mecze z Pandascore, paginacja, łączy pobrane mecze w jedną listę
+    private fun fetchInitialMatches(gameSlug: String): List<PandaScoreMatchDto> {
+
+        val upcomingMatches = mutableListOf<PandaScoreMatchDto>()
+        var stronaUpcoming = 1
+        while (true) {
+            val pobraneMecze = pandaScoreClient.pobierzNadchodzaceMecze(gameSlug, stronaUpcoming)
+
+            upcomingMatches.addAll(pobraneMecze)
+
+            if(pobraneMecze.size < 5 || stronaUpcoming >= 3) {
+                break
+            }
+
+            stronaUpcoming++
+        }
+
+        val pastMatches = mutableListOf<PandaScoreMatchDto>()
+        var stronaPast = 1
+        while (true) {
+            val pobraneMecze = pandaScoreClient.pobierzZakonczoneMecze(gameSlug, stronaPast)
+
+            pastMatches.addAll(pobraneMecze)
+
+            if(pobraneMecze.size < 5 || stronaPast >= 3) {
+                break
+            }
+            stronaPast++
+        }
+
+        val runningMatches = mutableListOf<PandaScoreMatchDto>()
+        var stronaRunning = 1
+        while (true) {
+            val pobraneMecze = pandaScoreClient.pobierzTrwajaceMecze(gameSlug, stronaRunning)
+
+            runningMatches.addAll(pobraneMecze)
+
+            if(pobraneMecze.size < 5 || stronaRunning >= 3) {
+                break
+            }
+            stronaRunning++
+        }
+
+
+        return upcomingMatches + pastMatches + runningMatches
+    }
+
+//pobiera mecze przez fetchInitialMatches, zlicza przetworzone i pominięte mecze
+    fun importInitialMatches(gameSlug: String) {
+        if(gameSlug != "cs2" && gameSlug != "lol") {
+            throw IllegalArgumentException("Nie obsługiwana gra: $gameSlug")
+        }
+
+        val matches = fetchInitialMatches(gameSlug)
+    logger.info("Import uzupełniający $gameSlug: pobrano ${matches.size} meczów")
+
+    var liczbaZapisanych = 0
+    var liczbaPominietych = 0
+
+    for (match in matches) {
+        val zapisano = processMatch(match, gameSlug)
+
+        if (zapisano == true) {
+            liczbaZapisanych++
+        } else {
+            liczbaPominietych++
+        }
+    }
+    logger.info("zapisano: $liczbaZapisanych, pominięto: $liczbaPominietych")
+
+    if(liczbaPominietych > 0) {
+        throw IllegalStateException("Pominięto: $liczbaPominietych")
+    }
+    }
+
+
     @Synchronized
     fun syncMatches(gameSlug: String = "cs2") {
         val czasRozpoczecia = Instant.now()
@@ -304,11 +377,8 @@ class PandaScoreSyncService(
                     }
                 }
             } else {
-                val upcomingMatches = pandaScoreClient.pobierzNadchodzaceMecze(gameSlug)
-                val pastMatches = pandaScoreClient.pobierzZakonczoneMecze(gameSlug)
-                val runningMatches = pandaScoreClient.pobierzTrwajaceMecze(gameSlug)
+                fetchInitialMatches(gameSlug)
 
-                upcomingMatches + pastMatches + runningMatches
             }
 
         logger.info("Synchronizacja: pobrano ${matches.size} meczów")
