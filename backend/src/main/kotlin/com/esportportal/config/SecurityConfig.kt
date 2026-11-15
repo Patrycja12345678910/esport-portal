@@ -19,6 +19,7 @@ class SecurityConfig {
                     .requestMatchers("/api/test/pandascore/past").permitAll()
                     .requestMatchers("/api/test/pandascore/running").permitAll()
                     .requestMatchers("/api/test/pandascore/deletions").permitAll()
+
                     .anyRequest().authenticated()
             }
 
