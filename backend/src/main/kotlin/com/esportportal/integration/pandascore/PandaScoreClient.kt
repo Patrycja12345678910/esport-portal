@@ -12,6 +12,7 @@ import org.springframework.web.client.HttpServerErrorException
 import org.springframework.web.client.HttpClientErrorException
 import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
 import com.esportportal.integration.pandascore.dto.PandaScoreDeletionDto
+import com.esportportal.integration.pandascore.dto.PandaScorePlayerDto
 import java.time.Instant
 import kotlin.contracts.Returns
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
@@ -261,5 +262,25 @@ class PandaScoreClient(
             .uri("/matches/{id}", id)
             .retrieve()
             .body(PandaScoreMatchDto::class.java)
+    }
+
+    fun pobierzZawodnikow(gameSlug: String, strona: Int = 1): List<PandaScorePlayerDto> {
+        val apiGame = when (gameSlug) {
+            "cs2" -> "csgo"
+            "lol" -> "lol"
+            else -> throw IllegalArgumentException("Nieobsługiwana gra: $gameSlug")
+
+        }
+        return restClient.get()
+            .uri { builder ->
+                builder.path("/$apiGame/players")
+                .queryParam("page", strona)
+                .queryParam("per_page", 100)
+                .build()
+            }
+            .retrieve()
+            .body(Array<PandaScorePlayerDto>::class.java)
+        ?.toList() ?: emptyList()
+
     }
 }

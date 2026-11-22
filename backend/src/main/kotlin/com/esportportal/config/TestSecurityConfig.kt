@@ -14,10 +14,17 @@ class TestSecurityConfig {
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .authorizeHttpRequests { auth ->
-                auth.anyRequest().authenticated()
+                auth
+                    .requestMatchers("/api/test/pandascore/**").permitAll()
+                    .requestMatchers("/api/test/pandascore").permitAll()
+                    .anyRequest().authenticated()
             }
             .csrf { csrf ->
-                csrf.ignoringRequestMatchers("/api/test/cito/sync", "/api/test/cito/approve")
+                csrf.ignoringRequestMatchers(
+                    "/api/test/cito/sync",
+                    "/api/test/cito/approve",
+                    "/api/test/pandascore/**"
+                )
             }
             .httpBasic { }
             .formLogin { }

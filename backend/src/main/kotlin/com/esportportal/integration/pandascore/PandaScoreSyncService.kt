@@ -20,8 +20,15 @@ import org.slf4j.LoggerFactory
 import com.esportportal.persistence.entity.SyncStateEntity
 import com.esportportal.integration.pandascore.dto.PandaScoreMatchDto
 import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
+import com.esportportal.integration.pandascore.dto.PandaScorePlayerDto
+import com.esportportal.persistence.entity.PlayerEntity
+import com.esportportal.persistence.repository.PlayerRepository
 import kotlin.math.log
 import org.springframework.context.annotation.Profile
+import com.esportportal.persistence.repository.TeamRosterRepository
+import com.esportportal.persistence.entity.TeamRosterEntity
+import org.springframework.transaction.annotation.Transactional
+
 
 @Service
 class PandaScoreSyncService(
@@ -31,10 +38,13 @@ class PandaScoreSyncService(
     private val pandaScoreClient: PandaScoreClient,
     private val tournamentStageRepository: TournamentStageRepository,
     private val matchRepository: MatchRepository,
-    private val syncStateRepository: SyncStateRepository
+    private val syncStateRepository: SyncStateRepository,
+    private val playerRepository: PlayerRepository,
+    private val teamRosterRepository: TeamRosterRepository,
+    private val pandaScorePlayerService: PandaScorePlayerService,
 
 
-) {
+    ) {
 
     private val logger = LoggerFactory.getLogger(PandaScoreSyncService::class.java)
 
@@ -55,6 +65,38 @@ class PandaScoreSyncService(
         team.name = name
 
         return teamRepository.save(team)
+    }
+
+
+
+    fun syncPlayers(gameSlug: String) {
+        var strona = 1
+
+        while (strona <= 10) {
+            logger.info("PandaScore {}: rozpoczynam pobieranie strony {}", gameSlug, strona)
+
+            val zawodnicy = pandaScoreClient.pobierzZawodnikow(gameSlug, strona)
+
+            logger.info("PandaScore {}: strona {} zwróciła {} zawodników",
+                gameSlug, strona, zawodnicy.size)
+
+            if (zawodnicy.isEmpty()) {
+             break
+            }
+
+            zawodnicy.forEach { zawodnik ->
+                if (!zawodnik.name.isNullOrBlank()) {
+                    pandaScorePlayerService.zapiszZawodnika(zawodnik)
+                }
+            }
+            logger.info("PandaScore {}: zakończono zapis zawodników ze strony {}", gameSlug, strona)
+
+            if (zawodnicy.size < 100) {
+                break
+            }
+
+            strona++
+        }
     }
 
     fun saveTournament(externalId: String, name: String, game: GameEntity): TournamentEntity {
@@ -435,17 +477,26 @@ class PandaScoreSyncService(
         syncStateRepository.save(syncState)
     }
 
-    @Profile("!test")
+
     //15 minut przerwy od zakończenia jednej synchronizacji do rozpoczęcia następnej
     @Scheduled(fixedDelay = 900000)
     fun automatycznaSynchronizacja() {
         try {
             logger.info("Rozpoczynam automatyczną synchronizację meczów CS2")
             syncMatches("cs2")
-            logger.info("Synchronizacja zakończona pomyślnie")
+            logger.info("Synchronizacja CS2 zakończona pomyślnie")
         } catch (e: Exception) {
-            logger.error("Synchronizacja nie powiodła się", e)
+            logger.error("Synchronizacja CS2 nie powiodła się", e)
         }
+        try {
+            logger.info("Rozpoczynam automatyczną synchronizację meczów LoL")
+            syncMatches("lol")
+            logger.info("Synchronizacja LoL zakończona pomyślnie")
+        } catch (e: Exception) {
+            logger.error("Synchronizacja LoL nie powiodła się", e)
+        }
+
     }
+
 
 }

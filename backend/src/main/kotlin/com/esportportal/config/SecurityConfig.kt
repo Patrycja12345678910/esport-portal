@@ -15,14 +15,13 @@ class SecurityConfig {
         http
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers("/api/test/pandascore", "/api/test/pandascore/incidents","/api/test/pandascore/incidents/raw","/api/test/pandascore/additions","/api/test/pandascore/match","/api/test/pandascore/changes/check").permitAll()
-                    .requestMatchers("/api/test/pandascore/past").permitAll()
-                    .requestMatchers("/api/test/pandascore/running").permitAll()
-                    .requestMatchers("/api/test/pandascore/deletions").permitAll()
-
+                    .requestMatchers("/api/test/pandascore/**").permitAll()
+                    .requestMatchers("/api/test/pandascore").permitAll()
                     .anyRequest().authenticated()
             }
-
+            .csrf { csrf ->
+                csrf.ignoringRequestMatchers("/api/test/pandascore/**")
+            }
             .formLogin { }
 
         return http.build()

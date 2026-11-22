@@ -56,6 +56,11 @@ class TeamMatchingService (
 
     @Transactional
     fun dopasujDruzyneCito(citoTeam: CitoTeamDto): TeamEntity? {
+
+        if (citoTeam.id.isBlank() || citoTeam.name.isBlank()) {
+            return null
+        }
+
         val mapowanie = znajdzMapowanieCito(citoTeam.id)
 
         if(mapowanie != null) {

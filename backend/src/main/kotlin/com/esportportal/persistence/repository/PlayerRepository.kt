@@ -3,5 +3,8 @@ package com.esportportal.persistence.repository
 import com.esportportal.persistence.entity.PlayerEntity
 import org.springframework.data.jpa.repository.JpaRepository
 
-interface PlayerRepository : JpaRepository<PlayerEntity, Long>
+interface PlayerRepository : JpaRepository<PlayerEntity, Long> {
+
+    fun findByExternalId(externalId: String): PlayerEntity?
+}
 

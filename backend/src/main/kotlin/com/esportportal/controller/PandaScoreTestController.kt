@@ -10,6 +10,8 @@ import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import com.esportportal.integration.pandascore.dto.PandaScoreDeletionDto
+import com.esportportal.integration.pandascore.dto.PandaScorePlayerDto
+import org.springframework.web.bind.annotation.RequestParam
 
 @RestController
 class PandaScoreTestController(
@@ -100,6 +102,22 @@ class PandaScoreTestController(
     fun testImportLol(): String {
         pandaScoreSyncService.importInitialMatches("lol")
         return "Import uzupełniający Lol zakończony"
+    }
+
+    @GetMapping("/api/test/pandascore/players")
+    fun testPlayers(
+        @RequestParam(defaultValue = "cs2") gameSlug: String,
+        @RequestParam(defaultValue = "1") strona: Int
+    ): List<PandaScorePlayerDto> {
+        return pandaScoreClient.pobierzZawodnikow(gameSlug,strona)
+    }
+
+    @PostMapping("/api/test/pandascore/players/sync")
+    fun testPlayersSync(
+        @RequestParam(defaultValue = "cs2") gameSlug: String
+    ): String {
+        pandaScoreSyncService.syncPlayers(gameSlug)
+        return "Synchronizacja zawodników $gameSlug zakończona"
     }
 
 }
