@@ -27,8 +27,9 @@ import kotlin.math.log
 import org.springframework.context.annotation.Profile
 import com.esportportal.persistence.repository.TeamRosterRepository
 import com.esportportal.persistence.entity.TeamRosterEntity
+import com.esportportal.persistence.repository.SyncImportLogRepository
 import org.springframework.transaction.annotation.Transactional
-
+import com.esportportal.persistence.entity.SyncImportLogEntity
 
 @Service
 class PandaScoreSyncService(
@@ -42,9 +43,10 @@ class PandaScoreSyncService(
     private val playerRepository: PlayerRepository,
     private val teamRosterRepository: TeamRosterRepository,
     private val pandaScorePlayerService: PandaScorePlayerService,
+    private val syncImportLogRepository: SyncImportLogRepository
 
 
-    ) {
+) {
 
     private val logger = LoggerFactory.getLogger(PandaScoreSyncService::class.java)
 
@@ -68,34 +70,65 @@ class PandaScoreSyncService(
     }
 
 
-
     fun syncPlayers(gameSlug: String) {
+        val log = SyncImportLogEntity()
+        log.source = "pandascore_$gameSlug"
+        log.status = "RUNNING"
+        log.startedAt = Instant.now()
+
+        syncImportLogRepository.save(log)
+
         var strona = 1
+        var liczbaZawodnikow = 0
 
-        while (strona <= 10) {
-            logger.info("PandaScore {}: rozpoczynam pobieranie strony {}", gameSlug, strona)
+        try {
 
-            val zawodnicy = pandaScoreClient.pobierzZawodnikow(gameSlug, strona)
+            while (strona <= 10) {
+                logger.info("PandaScore {}: rozpoczynam pobieranie strony {}", gameSlug, strona)
 
-            logger.info("PandaScore {}: strona {} zwróciła {} zawodników",
-                gameSlug, strona, zawodnicy.size)
+                val zawodnicy = pandaScoreClient.pobierzZawodnikow(gameSlug, strona)
 
-            if (zawodnicy.isEmpty()) {
-             break
-            }
+                liczbaZawodnikow += zawodnicy.size
 
-            zawodnicy.forEach { zawodnik ->
-                if (!zawodnik.name.isNullOrBlank()) {
-                    pandaScorePlayerService.zapiszZawodnika(zawodnik)
+
+                logger.info(
+                    "PandaScore {}: strona {} zwróciła {} zawodników",
+                    gameSlug, strona, zawodnicy.size
+                )
+
+                if (zawodnicy.isEmpty()) {
+                    break
                 }
-            }
-            logger.info("PandaScore {}: zakończono zapis zawodników ze strony {}", gameSlug, strona)
 
-            if (zawodnicy.size < 100) {
-                break
+                zawodnicy.forEach { zawodnik ->
+                    if (!zawodnik.name.isNullOrBlank()) {
+                        pandaScorePlayerService.zapiszZawodnika(zawodnik)
+                    }
+                }
+                logger.info("PandaScore {}: zakończono zapis zawodników ze strony {}", gameSlug, strona)
+
+                if (zawodnicy.size < 100) {
+                    break
+                }
+
+                strona++
             }
 
-            strona++
+            log.status = "SUCCESS"
+            log.finishedAt = Instant.now()
+            log.fetchedCount = liczbaZawodnikow
+
+            syncImportLogRepository.save(log)
+        } catch (e: Exception) {
+            log.status = "FAILED"
+            log.finishedAt = Instant.now()
+            log.fetchedCount = liczbaZawodnikow
+            log.errorMessage = e.message
+
+            syncImportLogRepository.save(log)
+
+            throw e
+
         }
     }
 
@@ -112,7 +145,7 @@ class PandaScoreSyncService(
 
     fun saveStage(externalId: String, name: String, tournament: TournamentEntity): TournamentStageEntity {
         val tournamentStage = tournamentStageRepository.findByExternalId(externalId)
-        ?: TournamentStageEntity()
+            ?: TournamentStageEntity()
 
         tournamentStage.externalId = externalId
         tournamentStage.name = name
@@ -121,7 +154,17 @@ class PandaScoreSyncService(
         return tournamentStageRepository.save(tournamentStage)
     }
 
-    fun saveMatch(externalId: String, tournament: TournamentEntity, stage: TournamentStageEntity?, homeTeam: TeamEntity?, awayTeam: TeamEntity?, scheduledAt: LocalDateTime?, status: String, homeScore: Int?, awayScore:Int?): MatchEntity {
+    fun saveMatch(
+        externalId: String,
+        tournament: TournamentEntity,
+        stage: TournamentStageEntity?,
+        homeTeam: TeamEntity?,
+        awayTeam: TeamEntity?,
+        scheduledAt: LocalDateTime?,
+        status: String,
+        homeScore: Int?,
+        awayScore: Int?
+    ): MatchEntity {
         val match = matchRepository.findByExternalId(externalId)
             ?: MatchEntity()
 
@@ -139,6 +182,7 @@ class PandaScoreSyncService(
         return matchRepository.save(match)
 
     }
+
     fun markMatchAsDeleted(externalId: String) {
         val match = matchRepository.findByExternalId(externalId)
             ?: return
@@ -152,15 +196,16 @@ class PandaScoreSyncService(
             ?: error("Nie znaleziono gry: $slug")
 
     }
+
     fun processMatch(match: PandaScoreMatchDto, gameSlug: String): Boolean {
         val game = getGame(gameSlug)
-        val expectedApiSlug = if(gameSlug == "cs2") {
+        val expectedApiSlug = if (gameSlug == "cs2") {
             "cs-go"
         } else {
             "league-of-legends"
         }
 
-        if(match.videogame?.slug != expectedApiSlug) {
+        if (match.videogame?.slug != expectedApiSlug) {
             logger.warn("Mecz ${match.id} należy do innej gry")
             return false
         }
@@ -180,7 +225,7 @@ class PandaScoreSyncService(
         val stage = match.tournament
         val stageId = stage?.id
 
-        if(stageId == null) {
+        if (stageId == null) {
             logger.warn("Brakuje etapu w meczu ID=${match.id}")
             return false
         }
@@ -189,7 +234,7 @@ class PandaScoreSyncService(
             ?.takeIf { it.isNotBlank() } ?: "Nieznany etap"
 
 
-        val opponents = match.opponents?: emptyList()
+        val opponents = match.opponents ?: emptyList()
 
         val firstTeam = opponents.getOrNull(0)?.opponent
 
@@ -270,14 +315,15 @@ class PandaScoreSyncService(
 
         return true
     }
+
     fun syncSingleMatch(id: Long, gameSlug: String): Boolean {
         val match = pandaScoreClient.pobierzMeczPoId(id)
             ?: return false
 
-        return processMatch(match,gameSlug)
+        return processMatch(match, gameSlug)
     }
 
-// Pobiera mecze z Pandascore, paginacja, łączy pobrane mecze w jedną listę
+    // Pobiera mecze z Pandascore, paginacja, łączy pobrane mecze w jedną listę
     private fun fetchInitialMatches(gameSlug: String): List<PandaScoreMatchDto> {
 
         val upcomingMatches = mutableListOf<PandaScoreMatchDto>()
@@ -287,7 +333,7 @@ class PandaScoreSyncService(
 
             upcomingMatches.addAll(pobraneMecze)
 
-            if(pobraneMecze.size < 5 || stronaUpcoming >= 3) {
+            if (pobraneMecze.size < 20 || stronaUpcoming >= 3) {
                 break
             }
 
@@ -301,7 +347,7 @@ class PandaScoreSyncService(
 
             pastMatches.addAll(pobraneMecze)
 
-            if(pobraneMecze.size < 5 || stronaPast >= 3) {
+            if (pobraneMecze.size < 20 || stronaPast >= 3) {
                 break
             }
             stronaPast++
@@ -314,7 +360,7 @@ class PandaScoreSyncService(
 
             runningMatches.addAll(pobraneMecze)
 
-            if(pobraneMecze.size < 5 || stronaRunning >= 3) {
+            if (pobraneMecze.size < 20 || stronaRunning >= 3) {
                 break
             }
             stronaRunning++
@@ -324,32 +370,63 @@ class PandaScoreSyncService(
         return upcomingMatches + pastMatches + runningMatches
     }
 
-//pobiera mecze przez fetchInitialMatches, zlicza przetworzone i pominięte mecze
+    //pobiera mecze przez fetchInitialMatches, zlicza przetworzone i pominięte mecze
     fun importInitialMatches(gameSlug: String) {
-        if(gameSlug != "cs2" && gameSlug != "lol") {
-            throw IllegalArgumentException("Nie obsługiwana gra: $gameSlug")
+        val log = SyncImportLogEntity()
+        log.status = "RUNNING"
+        log.startedAt = Instant.now()
+        log.source = "pandascore_matches_initial_$gameSlug"
+
+        syncImportLogRepository.save(log)
+
+        var liczbaZapisanych = 0
+        var liczbaPominietych = 0
+        var liczbaPobranych = 0
+
+        try {
+
+            if (gameSlug != "cs2" && gameSlug != "lol") {
+                throw IllegalArgumentException("Nie obsługiwana gra: $gameSlug")
+            }
+
+            val matches = fetchInitialMatches(gameSlug)
+            liczbaPobranych = matches.size
+            logger.info("Import uzupełniający $gameSlug: pobrano ${matches.size} meczów")
+
+
+            for (match in matches) {
+                val zapisano = processMatch(match, gameSlug)
+
+                if (zapisano == true) {
+                    liczbaZapisanych++
+                } else {
+                    liczbaPominietych++
+                }
+            }
+            logger.info("zapisano: $liczbaZapisanych, pominięto: $liczbaPominietych")
+            if (liczbaPominietych > 0) {
+                throw IllegalStateException("Pominięto: $liczbaPominietych")
+            }
+
+            log.status = "SUCCESS"
+            log.finishedAt = Instant.now()
+            log.fetchedCount = liczbaPobranych
+            log.rejectedCount = liczbaPominietych
+
+            syncImportLogRepository.save(log)
+
+        } catch (e: Exception) {
+            log.status = "FAILED"
+            log.finishedAt = Instant.now()
+            log.errorMessage = e.message
+            log.fetchedCount = liczbaPobranych
+            log.rejectedCount = liczbaPominietych
+
+            syncImportLogRepository.save(log)
+
+            throw e
         }
 
-        val matches = fetchInitialMatches(gameSlug)
-    logger.info("Import uzupełniający $gameSlug: pobrano ${matches.size} meczów")
-
-    var liczbaZapisanych = 0
-    var liczbaPominietych = 0
-
-    for (match in matches) {
-        val zapisano = processMatch(match, gameSlug)
-
-        if (zapisano == true) {
-            liczbaZapisanych++
-        } else {
-            liczbaPominietych++
-        }
-    }
-    logger.info("zapisano: $liczbaZapisanych, pominięto: $liczbaPominietych")
-
-    if(liczbaPominietych > 0) {
-        throw IllegalStateException("Pominięto: $liczbaPominietych")
-    }
     }
 
 
@@ -357,124 +434,152 @@ class PandaScoreSyncService(
     fun syncMatches(gameSlug: String = "cs2") {
         val czasRozpoczecia = Instant.now()
 
-        val source = "pandascore_$gameSlug"
-        val syncState = syncStateRepository.findBySource(source)
-            ?: SyncStateEntity()
-        syncState.source = source
+        val log = SyncImportLogEntity()
+        log.source = "pandascore_matches_sync_$gameSlug"
+        log.status = "RUNNING"
+        log.startedAt = czasRozpoczecia
 
-        val ostatniaSynchronizacja = syncState.lastSuccessfulSync
-        logger.info("Ostatnia synchronizacja: $ostatniaSynchronizacja")
+        syncImportLogRepository.save(log)
 
-        val matches: List<PandaScoreMatchDto> =
-            if (ostatniaSynchronizacja != null) {
+        var liczbaPobranych = 0
+        var liczbaPominietych = 0
 
-                val incidents = mutableListOf<PandaScoreIncidentDto>()
-                var strona = 1
+        try {
 
-                while (true) {
-                    val pobraneIncydenty = pandaScoreClient.pobierzZmianyMeczow(
-                        ostatniaSynchronizacja,
-                        gameSlug,
-                        strona
-                    )
+            val source = "pandascore_$gameSlug"
+            val syncState = syncStateRepository.findBySource(source)
+                ?: SyncStateEntity()
+            syncState.source = source
 
-                    incidents.addAll(pobraneIncydenty)
-                    pobraneIncydenty.forEach { incident ->
-                        logger.info(
-                            "Pobrano zmianę meczu: ID=${incident.id}, typ=${incident.changeType}, modifiedAt=${incident.modifiedAt}"
+            val ostatniaSynchronizacja = syncState.lastSuccessfulSync
+            logger.info("Ostatnia synchronizacja: $ostatniaSynchronizacja")
+
+            val matches: List<PandaScoreMatchDto> =
+                if (ostatniaSynchronizacja != null) {
+
+                    val incidents = mutableListOf<PandaScoreIncidentDto>()
+                    var strona = 1
+
+                    while (true) {
+                        val pobraneIncydenty = pandaScoreClient.pobierzZmianyMeczow(
+                            ostatniaSynchronizacja,
+                            gameSlug,
+                            strona
                         )
-                    }
-                    logger.info("Changes, strona $strona: ${pobraneIncydenty.size} incydentów")
 
-                    if (pobraneIncydenty.size < 100) {
-                        break
+                        incidents.addAll(pobraneIncydenty)
+                        pobraneIncydenty.forEach { incident ->
+                            logger.info(
+                                "Pobrano zmianę meczu: ID=${incident.id}, typ=${incident.changeType}, modifiedAt=${incident.modifiedAt}"
+                            )
+                        }
+                        logger.info("Changes, strona $strona: ${pobraneIncydenty.size} incydentów")
+
+                        if (pobraneIncydenty.size < 100) {
+                            break
+                        }
+
+                        strona++
+                    }
+                    var stronaNowych = 1
+
+                    while (true) {
+                        val noweMecze = pandaScoreClient.pobierzNoweMecze(
+                            ostatniaSynchronizacja,
+                            gameSlug,
+                            stronaNowych
+                        )
+
+                        incidents.addAll(noweMecze)
+                        logger.info("Additions, strona $stronaNowych: ${noweMecze.size} incydentów")
+
+                        if (noweMecze.size < 100) {
+                            break
+                        }
+
+                        stronaNowych++
                     }
 
-                    strona++
+                    incidents.mapNotNull { incident ->
+                        if (incident.changeType == "update" || incident.changeType == "creation") {
+                            incident.`object`
+                        } else {
+                            null
+                        }
+                    }
+                } else {
+                    fetchInitialMatches(gameSlug)
+
                 }
-                var stronaNowych = 1
+
+            logger.info("Synchronizacja: pobrano ${matches.size} meczów")
+            liczbaPobranych = matches.size
+
+            var pominietoMecze = false
+            var licznik = 0
+
+            for (match in matches) {
+                val zapisano = processMatch(match, gameSlug)
+
+                if (!zapisano) {
+                    pominietoMecze = true
+                    licznik++
+                    logger.warn("Nie udało się przetworzyć meczu ID=${match.id}, gra=$gameSlug")
+                }
+            }
+            logger.info("Licznik: $licznik")
+            liczbaPominietych = licznik
+
+            if (ostatniaSynchronizacja != null) {
+                var stronaUsuniec = 1
 
                 while (true) {
-                    val noweMecze = pandaScoreClient.pobierzNoweMecze(
+                    val usunieteMecze = pandaScoreClient.pobierzUsunieteMecze(
                         ostatniaSynchronizacja,
                         gameSlug,
-                        stronaNowych
+                        stronaUsuniec
                     )
+                    logger.info("Liczba usuniętych meczów na stronie: ${usunieteMecze.size}")
 
-                    incidents.addAll(noweMecze)
-                    logger.info("Additions, strona $stronaNowych: ${noweMecze.size} incydentów")
+                    for (incident in usunieteMecze) {
+                        if (incident.type == "match" && incident.changeType == "deletion") {
+                            markMatchAsDeleted(incident.id.toString())
+                        }
+                    }
 
-                    if (noweMecze.size < 100) {
+                    if (usunieteMecze.size < 100) {
                         break
                     }
 
-                    stronaNowych++
+                    stronaUsuniec++
                 }
-
-                incidents.mapNotNull { incident ->
-                    if (incident.changeType == "update" || incident.changeType == "creation") {
-                        incident.`object`
-                    } else {
-                        null
-                    }
-                }
-            } else {
-                fetchInitialMatches(gameSlug)
-
             }
-
-        logger.info("Synchronizacja: pobrano ${matches.size} meczów")
-
-        logger.info(
-            "Czy pobrano mecz 1795395: ${matches.any { it.id == 1795395L }}"
-        )
-
-        var pominietoMecze = false
-        var licznik = 0
-
-        for (match in matches) {
-            val zapisano = processMatch(match, gameSlug)
-
-            if (!zapisano) {
-                pominietoMecze = true
-                licznik++
-                logger.warn("Nie udało się przetworzyć meczu ID=${match.id}, gra=$gameSlug")
-            }
-        }
-        logger.info("Licznik: $licznik")
-
-        if (ostatniaSynchronizacja != null) {
-            var stronaUsuniec = 1
-
-            while (true) {
-                val usunieteMecze = pandaScoreClient.pobierzUsunieteMecze(
-                    ostatniaSynchronizacja,
-                    gameSlug,
-                    stronaUsuniec
+            if (pominietoMecze) {
+                throw IllegalStateException(
+                    "Pominięto mecze z niepełnymi danymi. Synchronizacja nie została w pełni zakończona."
                 )
-                logger.info("Liczba usuniętych meczów na stronie: ${usunieteMecze.size}")
-
-                for (incident in usunieteMecze) {
-                    if (incident.type == "match" && incident.changeType == "deletion") {
-                        markMatchAsDeleted(incident.id.toString())
-                    }
-                }
-
-                if (usunieteMecze.size < 100) {
-                    break
-                }
-
-                stronaUsuniec++
             }
-        }
-        if (pominietoMecze) {
-            throw IllegalStateException(
-                "Pominięto mecze z niepełnymi danymi. Synchronizacja nie została w pełni zakończona."
-            )
-        }
 
-        syncState.lastSuccessfulSync = czasRozpoczecia
-        syncStateRepository.save(syncState)
+            syncState.lastSuccessfulSync = czasRozpoczecia
+            syncStateRepository.save(syncState)
+
+            log.status = "SUCCESS"
+            log.finishedAt = Instant.now()
+            log.fetchedCount = liczbaPobranych
+            log.rejectedCount = liczbaPominietych
+
+            syncImportLogRepository.save(log)
+        } catch (e: Exception) {
+            log.status = "FAILED"
+            log.finishedAt = Instant.now()
+            log.errorMessage = e.message
+            log.fetchedCount = liczbaPobranych
+            log.rejectedCount = liczbaPominietych
+
+            syncImportLogRepository.save(log)
+
+            throw e
+        }
     }
 
 

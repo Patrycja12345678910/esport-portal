@@ -104,6 +104,12 @@ class PandaScoreTestController(
         return "Import uzupełniający Lol zakończony"
     }
 
+    @PostMapping("/api/test/pandascore/import/cs2")
+    fun testImportCs2(): String {
+        pandaScoreSyncService.importInitialMatches("cs2")
+        return "Import uzupełniający CS2 zakończony"
+    }
+
     @GetMapping("/api/test/pandascore/players")
     fun testPlayers(
         @RequestParam(defaultValue = "cs2") gameSlug: String,

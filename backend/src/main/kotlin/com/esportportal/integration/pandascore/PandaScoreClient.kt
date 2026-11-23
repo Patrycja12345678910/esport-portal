@@ -113,7 +113,7 @@ class PandaScoreClient(
                 return restClient.get()
                     .uri { builder ->
                         builder.path(sciezka)
-                            .queryParam("per_page", 5)
+                            .queryParam("per_page", 20)
                             .queryParam("page", strona)
                             .build()
                     }
@@ -145,6 +145,7 @@ class PandaScoreClient(
         maxRetries = 2,
         delay = 2000
     )
+
     fun pobierzNoweMecze(
         odKiedy: Instant,
         gameSlug: String,
