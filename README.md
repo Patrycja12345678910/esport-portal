@@ -11,8 +11,8 @@ rozgrywek esportowych dla gier Counter-Strike 2 oraz League of Legends.
 - [Docker](#docker)
 - [Konfiguracja](#konfiguracja)
 - [Aktualny stan projektu](#aktualny-stan-projektu)
-    - [Etap 1 - analiza i przygotowanie projektu](#etap-1--analiza-i-przygotowanie-projektu)
-    - [Etap 2 - integracja i synchronizacja danych](#etap-2--integracja-i-synchronizacja-danych)
+    - [Etap 1 - analiza i przygotowanie projektu](#etap-1---analiza-i-przygotowanie-projektu)
+    - [Etap 2 - integracja i synchronizacja danych](#etap-2---integracja-i-synchronizacja-danych)
 - [Dalsze prace](#dalsze-prace)
 
 
