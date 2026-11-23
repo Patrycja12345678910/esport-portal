@@ -12,6 +12,7 @@ import org.springframework.web.client.HttpServerErrorException
 import org.springframework.web.client.HttpClientErrorException
 import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
 import com.esportportal.integration.pandascore.dto.PandaScoreDeletionDto
+import com.esportportal.integration.pandascore.dto.PandaScorePlayerDto
 import java.time.Instant
 import kotlin.contracts.Returns
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
@@ -46,8 +47,13 @@ class PandaScoreClient(
         delay = 2000
 
     )
-    fun pobierzNadchodzaceMeczeCS2(): List<PandaScoreMatchDto> {
-        return pobierzMeczeCS2("/csgo/matches/upcoming")
+    fun pobierzNadchodzaceMecze(gameSlug: String, strona: Int = 1): List<PandaScoreMatchDto> {
+        val apiGame = if(gameSlug == "cs2") {
+           "csgo"
+        } else {
+            "lol"
+        }
+        return pobierzMecze("/$apiGame/matches/upcoming", gameSlug, strona)
     }
 
     @CircuitBreaker(name = "pandascore")
@@ -56,8 +62,13 @@ class PandaScoreClient(
         maxRetries = 2,
         delay = 2000
     )
-    fun pobierzTrwajaceMeczeCS2(): List<PandaScoreMatchDto> {
-        return pobierzMeczeCS2("/csgo/matches/running")
+    fun pobierzTrwajaceMecze(gameSlug: String, strona: Int = 1): List<PandaScoreMatchDto> {
+        val apiGame = if(gameSlug == "cs2") {
+            "csgo"
+        } else {
+            "lol"
+        }
+        return pobierzMecze("/$apiGame/matches/running", gameSlug, strona)
     }
 
     private fun odczytajRetryAfter(e: HttpClientErrorException.TooManyRequests
@@ -82,12 +93,18 @@ class PandaScoreClient(
         maxRetries = 2,
         delay = 2000
     )
-    fun pobierzZakonczoneMeczeCS2() : List<PandaScoreMatchDto> {
-        return pobierzMeczeCS2("/csgo/matches/past")
+    fun pobierzZakonczoneMecze(gameSlug: String, strona: Int = 1) : List<PandaScoreMatchDto> {
+        val apiGame = if (gameSlug == "cs2") {
+            "csgo"
+        } else {
+            "lol"
+        }
+        return pobierzMecze("/$apiGame/matches/past", gameSlug, strona)
     }
 
-    private fun pobierzMeczeCS2(sciezka: String): List<PandaScoreMatchDto> {
+    private fun pobierzMecze(sciezka: String, gameSlug: String, strona: Int = 1): List<PandaScoreMatchDto> {
         var liczbaProb = 0
+
 
         while (true) {
             liczbaProb += 1
@@ -96,8 +113,8 @@ class PandaScoreClient(
                 return restClient.get()
                     .uri { builder ->
                         builder.path(sciezka)
-                            .queryParam("per_page", 5)
-                            .queryParam("filter[videogame_title]", "cs-2")
+                            .queryParam("per_page", 20)
+                            .queryParam("page", strona)
                             .build()
                     }
                     .retrieve()
@@ -121,22 +138,30 @@ class PandaScoreClient(
             }
         }
     }
+
     @CircuitBreaker(name = "pandascore")
     @Retryable(
         includes = [ResourceAccessException::class,HttpServerErrorException::class],
         maxRetries = 2,
         delay = 2000
     )
-    fun pobierzNoweMeczeCS2(
+
+    fun pobierzNoweMecze(
         odKiedy: Instant,
+        gameSlug: String,
         strona: Int = 1
     ): List<PandaScoreIncidentDto> {
+        val apiGame = if(gameSlug == "cs2") {
+            "cs-go"
+        } else {
+            "lol"
+        }
 
         return restClient.get()
             .uri { builder ->
                 builder.path("/additions")
                     .queryParam("type", "match")
-                    .queryParam("videogame", "cs-go")
+                    .queryParam("videogame", apiGame)
                     .queryParam("since", odKiedy.toString())
                     .queryParam("page", strona)
                     .queryParam("per_page", 100)
@@ -155,12 +180,17 @@ class PandaScoreClient(
         maxRetries = 2,
         delay = 2000
     )
-    fun pobierzZmianyMeczowCS2(odKiedy: Instant, strona: Int =1) : List<PandaScoreIncidentDto> {
+    fun pobierzZmianyMeczow(odKiedy: Instant, gameSlug: String ,strona: Int =1) : List<PandaScoreIncidentDto> {
+        val apiGame = if(gameSlug == "cs2") {
+            "cs-go"
+        } else {
+            "lol"
+        }
         return restClient.get()
             .uri { builder ->
                 builder.path("/changes")
                     .queryParam("type", "match")
-                    .queryParam("videogame","cs-go")
+                    .queryParam("videogame", apiGame)
                     .queryParam("since",odKiedy.toString())
                     .queryParam("page",strona)
                     .queryParam("per_page",100)
@@ -173,12 +203,17 @@ class PandaScoreClient(
     }
 
     @CircuitBreaker(name = "pandascore")
-    fun pobierzSuroweIncydenty(odKiedy: Instant): String {
+    fun pobierzSuroweIncydenty(odKiedy: Instant, gameSlug: String): String {
+        val apiGame = if(gameSlug == "cs2") {
+            "cs-go"
+        } else {
+            "lol"
+        }
         return restClient.get()
             .uri { builder ->
                 builder.path("/incidents")
                     .queryParam("type", "match")
-                    .queryParam("videogame", "cs-go")
+                    .queryParam("videogame", apiGame)
                     .queryParam("since", odKiedy.toString())
                     .queryParam("page", 1)
                     .queryParam("per_page", 5)
@@ -196,16 +231,22 @@ class PandaScoreClient(
         maxRetries = 2,
         delay = 2000
     )
-    fun pobierzUsunieteMeczeCS2(
+    fun pobierzUsunieteMecze(
         odKiedy: Instant,
+        gameSlug: String,
         strona: Int = 1
     ): List<PandaScoreDeletionDto> {
+        val apiGame = if(gameSlug == "cs2") {
+            "cs-go"
+        } else {
+            "lol"
+        }
 
         return restClient.get()
             .uri { builder ->
                 builder.path("/deletions")
                     .queryParam("type", "match")
-                    .queryParam("videogame", "cs-go")
+                    .queryParam("videogame", apiGame)
                     .queryParam("since", odKiedy.toString())
                     .queryParam("page", strona)
                     .queryParam("per_page", 100)
@@ -222,5 +263,25 @@ class PandaScoreClient(
             .uri("/matches/{id}", id)
             .retrieve()
             .body(PandaScoreMatchDto::class.java)
+    }
+
+    fun pobierzZawodnikow(gameSlug: String, strona: Int = 1): List<PandaScorePlayerDto> {
+        val apiGame = when (gameSlug) {
+            "cs2" -> "csgo"
+            "lol" -> "lol"
+            else -> throw IllegalArgumentException("Nieobsługiwana gra: $gameSlug")
+
+        }
+        return restClient.get()
+            .uri { builder ->
+                builder.path("/$apiGame/players")
+                .queryParam("page", strona)
+                .queryParam("per_page", 100)
+                .build()
+            }
+            .retrieve()
+            .body(Array<PandaScorePlayerDto>::class.java)
+        ?.toList() ?: emptyList()
+
     }
 }

@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.PostMapping
 import com.esportportal.integration.pandascore.dto.PandaScoreIncidentDto
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import com.esportportal.integration.pandascore.dto.PandaScoreDeletionDto
+import com.esportportal.integration.pandascore.dto.PandaScorePlayerDto
+import org.springframework.web.bind.annotation.RequestParam
 
 @RestController
 class PandaScoreTestController(
@@ -19,12 +22,17 @@ class PandaScoreTestController(
 
     @GetMapping("/api/test/pandascore")
     fun testPandaScore(): List<PandaScoreMatchDto> {
-        return pandaScoreClient.pobierzNadchodzaceMeczeCS2()
+        return pandaScoreClient.pobierzNadchodzaceMecze("lol")
     }
 
     @GetMapping("/api/test/pandascore/past")
     fun testPastMatches(): List<PandaScoreMatchDto> {
-        return pandaScoreClient.pobierzZakonczoneMeczeCS2()
+        return pandaScoreClient.pobierzZakonczoneMecze("lol")
+    }
+
+    @GetMapping("/api/test/pandascore/running")
+    fun testRunningMatches(): List<PandaScoreMatchDto> {
+        return pandaScoreClient.pobierzTrwajaceMecze("lol")
     }
 
     @PostMapping("/api/test/pandascore/sync")
@@ -33,38 +41,90 @@ class PandaScoreTestController(
 
         return "Synchronizacja zakończona"
     }
-        @GetMapping("/api/test/pandascore/incidents")
-        fun testIncidents(): List<PandaScoreIncidentDto> {
-            val odKiedy = Instant.now().minus(24, ChronoUnit.HOURS)
 
-            return pandaScoreClient.pobierzZmianyMeczowCS2(odKiedy)
-        }
+    @PostMapping("/api/test/pandascore/sync/lol")
+    fun testSyncLol(): String {
+        pandaScoreSyncService.syncMatches("lol")
+
+        return "Synchronizacja LoL zakończona"
+    }
+
+    @GetMapping("/api/test/pandascore/incidents")
+    fun testIncidents(): List<PandaScoreIncidentDto> {
+        val odKiedy = Instant.now().minus(24, ChronoUnit.HOURS)
+
+        return pandaScoreClient.pobierzZmianyMeczow(odKiedy, "lol")
+    }
+
     @GetMapping("/api/test/pandascore/incidents/raw")
     fun testRawIncidents(): String {
         val odKiedy = Instant.now().minus(24, ChronoUnit.HOURS)
 
-        return pandaScoreClient.pobierzSuroweIncydenty(odKiedy)
+        return pandaScoreClient.pobierzSuroweIncydenty(odKiedy, "cs2")
     }
+
     @GetMapping("/api/test/pandascore/additions")
     fun testAdditions(): List<PandaScoreIncidentDto> {
         val odKiedy = Instant.now().minus(24, ChronoUnit.HOURS)
 
-        return pandaScoreClient.pobierzNoweMeczeCS2(odKiedy)
+        return pandaScoreClient.pobierzNoweMecze(odKiedy, "lol")
     }
+
     @GetMapping("/api/test/pandascore/match")
     fun testMatch(): PandaScoreMatchDto? {
         return pandaScoreClient.pobierzMeczPoId(1795395)
     }
+
     @GetMapping("/api/test/pandascore/changes/check")
     fun testChangesCheck(): Boolean {
         val odKiedy = Instant.parse("2026-11-09T16:00:00Z")
 
-        return pandaScoreClient.pobierzZmianyMeczowCS2(odKiedy)
+        return pandaScoreClient.pobierzZmianyMeczow(odKiedy, "cs2")
             .any { it.id == 1795395L }
     }
+
     @PostMapping("/api/test/pandascore/match/sync")
     fun testSingleMatchSync(): Boolean {
-        return pandaScoreSyncService.syncSingleMatch(1795395L)
+        return pandaScoreSyncService.syncSingleMatch(1795395L, "cs2")
     }
+
+    @GetMapping("/api/test/pandascore/deletions")
+    fun testDeletions(): List<PandaScoreDeletionDto> {
+        val odKiedy = Instant.now().minus(24, ChronoUnit.HOURS)
+
+        return pandaScoreClient.pobierzUsunieteMecze(
+            odKiedy,
+            "lol"
+        )
+
     }
+    @PostMapping("/api/test/pandascore/import/lol")
+    fun testImportLol(): String {
+        pandaScoreSyncService.importInitialMatches("lol")
+        return "Import uzupełniający Lol zakończony"
+    }
+
+    @PostMapping("/api/test/pandascore/import/cs2")
+    fun testImportCs2(): String {
+        pandaScoreSyncService.importInitialMatches("cs2")
+        return "Import uzupełniający CS2 zakończony"
+    }
+
+    @GetMapping("/api/test/pandascore/players")
+    fun testPlayers(
+        @RequestParam(defaultValue = "cs2") gameSlug: String,
+        @RequestParam(defaultValue = "1") strona: Int
+    ): List<PandaScorePlayerDto> {
+        return pandaScoreClient.pobierzZawodnikow(gameSlug,strona)
+    }
+
+    @PostMapping("/api/test/pandascore/players/sync")
+    fun testPlayersSync(
+        @RequestParam(defaultValue = "cs2") gameSlug: String
+    ): String {
+        pandaScoreSyncService.syncPlayers(gameSlug)
+        return "Synchronizacja zawodników $gameSlug zakończona"
+    }
+
+}
 

@@ -11,8 +11,8 @@ rozgrywek esportowych dla gier Counter-Strike 2 oraz League of Legends.
 - [Docker](#docker)
 - [Konfiguracja](#konfiguracja)
 - [Aktualny stan projektu](#aktualny-stan-projektu)
-    - [Etap 1 – analiza i przygotowanie projektu](#etap-1--analiza-i-przygotowanie-projektu)
-    - [Etap 2 – integracja i synchronizacja danych](#etap-2--integracja-i-synchronizacja-danych)
+    - [Etap 1 - analiza i przygotowanie projektu](#etap-1--analiza-i-przygotowanie-projektu)
+    - [Etap 2 - integracja i synchronizacja danych](#etap-2--integracja-i-synchronizacja-danych)
 - [Dalsze prace](#dalsze-prace)
 
 
@@ -38,19 +38,16 @@ rozgrywek esportowych dla gier Counter-Strike 2 oraz League of Legends.
 
 ## Zewnętrzne API
 
-W projekcie planowane jest wykorzystanie dwóch zewnętrznych źródeł danych:
+W projekcie wykorzystywane są dwa zewnętrzne źródła danych:
 
-- **PandaScore API** – główne źródło danych dla CS2 i League of Legends,
-- **Riot Games API** – źródło uzupełniające dla League of Legends.
+- **PandaScore API** - główne źródło danych dla Counter-Strike 2 i League of Legends, obejmujące mecze, turnieje, drużyny oraz zawodników.
+- **Cito API** - dodatkowe źródło danych o drużynach, wykorzystywane do ich dopasowywania i identyfikacji między źródłami.
 
-API będą wykorzystywane do pobierania informacji dotyczących m.in.:
-- turniejów,
-- meczów,
-- drużyn,
-- zawodników.
+Dane pobierane z zewnętrznych API są przetwarzane i zapisywane
+w lokalnej bazie PostgreSQL.
 
-Dane pobierane z zewnętrznych źródeł będą normalizowane, deduplikowane
-i zapisywane w lokalnej bazie PostgreSQL.
+W projekcie zastosowano synchronizację przyrostową, deduplikację rekordów
+oraz mapowanie identyfikatorów zewnętrznych drużyn.
 
 ## Projekt bazy danych
 
@@ -65,7 +62,8 @@ Zaprojektowano model danych aplikacji obejmujący m.in.:
 - użytkowników,
 - ulubione drużyny i turnieje.
 
-Diagram ERD przedstawiający strukturę bazy danych:
+Wstępny diagram ERD przygotowany podczas pierwszego etapu projektu.
+Diagram zostanie zaktualizowany po zakończeniu prac nad strukturą bazy danych:
 
 ![Diagram ERD](docs/erd.svg?v=2)
 
@@ -75,8 +73,8 @@ Projekt wykorzystuje Docker oraz Docker Compose.
 
 Aktualnie uruchamiane są dwa kontenery:
 
-- `esport-backend` – aplikacja Kotlin/Spring Boot,
-- `esport-postgres` – baza PostgreSQL.
+- `esport-backend` - aplikacja Kotlin/Spring Boot,
+- `esport-postgres` - baza PostgreSQL.
 
 Backend komunikuje się z bazą PostgreSQL wewnątrz sieci Docker.
 
@@ -98,14 +96,14 @@ w repozytorium.
 
 ## Aktualny stan projektu
 
-### Etap 1 – analiza i przygotowanie projektu
+### Etap 1 - analiza i przygotowanie projektu
 
 W ramach pierwszego etapu wykonano:
 
 - [x] analizę wymagań projektu,
 - [x] wybór technologii,
 - [x] wybór gier: Counter-Strike 2 i League of Legends,
-- [x] wybór źródeł danych: PandaScore API oraz Riot Games API,
+- [x] wybór źródeł danych: PandaScore API oraz Cito API,
 - [x] zaprojektowanie modelu bazy danych i diagramu ERD,
 - [x] utworzenie szkieletu backendu w Kotlin/Spring Boot,
 - [x] konfigurację PostgreSQL,
@@ -114,38 +112,71 @@ W ramach pierwszego etapu wykonano:
 - [x] uruchomienie oraz przetestowanie komunikacji backendu z bazą danych,
 - [x] przygotowanie VPS i instalację Docker oraz Docker Compose.
 
-### Etap 2 – integracja i synchronizacja danych
+### Etap 2 - integracja i synchronizacja danych
 
 W ramach drugiego etapu wykonano:
 
-- integrację z PandaScore API dla gry Counter-Strike 2,
+#### Integracja PandaScore API
+
+- integrację z PandaScore API dla Counter-Strike 2 i League of Legends,
 - utworzenie klienta API z wykorzystaniem `RestClient`,
 - pobieranie meczów nadchodzących, trwających i zakończonych,
+- pobieranie danych zawodników,
 - przygotowanie klas DTO do odbierania danych z API,
-- przetwarzanie i zapisywanie informacji o meczach, drużynach, turniejach i etapach turniejów w PostgreSQL,
-- dodanie aktualizacji istniejących rekordów na podstawie identyfikatorów zewnętrznych (`externalId`),
-- implementację synchronizacji przyrostowej, pobierającej nowe, zmienione i usunięte rekordy,
-- zapisywanie czasu ostatniej pomyślnej synchronizacji w bazie danych,
-- uruchomienie automatycznej synchronizacji danych za pomocą `@Scheduled`,
-- dodanie podstawowego logowania przebiegu synchronizacji,
-- obsługę meczów, dla których nie są jeszcze znane drużyny,
-- dodanie migracji bazy danych za pomocą Flyway,
+- przetwarzanie i zapisywanie meczów, turniejów, etapów turniejów,
+  drużyn i zawodników w PostgreSQL,
+- obsługę meczów, dla których nie są jeszcze znane drużyny.
+
+#### Synchronizacja i deduplikacja danych
+
+- implementację importu początkowego meczów,
+- implementację synchronizacji przyrostowej obejmującej nowe,
+  zmienione i usunięte rekordy,
+- zapisywanie czasu ostatniej pomyślnej synchronizacji,
+- aktualizację istniejących rekordów na podstawie `externalId`,
+- ograniczanie powstawania duplikatów w bazie danych,
+- zapisywanie zawodników i ich powiązań z drużynami,
+- przechowywanie historii przynależności zawodników do drużyn,
+- przygotowanie automatycznej synchronizacji za pomocą `@Scheduled`.
+
+#### Integracja Cito API
+
+- dodanie drugiego źródła danych - Cito API,
+- pobieranie danych drużyn z Cito,
+- implementację mechanizmu dopasowywania drużyn do rekordów
+  zapisanych w bazie danych,
+- przygotowanie mapowania identyfikatorów zewnętrznych drużyn,
+- zapisywanie powiązań między drużynami pochodzącymi
+  z różnych źródeł,
+- ograniczanie liczby zapytań do API,
+- przygotowanie harmonogramu synchronizacji danych Cito.
+
+#### Obsługa błędów i audyt
+
 - konfigurację timeoutów dla zapytań do API,
 - dodanie mechanizmu ponawiania nieudanych zapytań (`retry`),
-- obsługę błędu HTTP 429 oraz nagłówka `Retry-After`,
+- obsługę błędu HTTP 429 i nagłówka `Retry-After`,
 - przygotowanie rate limitera ograniczającego częstotliwość zapytań,
-- dodanie mechanizmu circuit breaker z wykorzystaniem biblioteki Resilience4j,
-- przygotowanie testów synchronizacji oraz wybranych mechanizmów obsługi błędów API.
+- dodanie mechanizmu circuit breaker z wykorzystaniem Resilience4j,
+- zapisywanie historii importów i synchronizacji w PostgreSQL,
+- rejestrowanie statusów `RUNNING`, `SUCCESS` i `FAILED`,
+- zapisywanie liczby pobranych i pominiętych rekordów
+  oraz komunikatów błędów,
+- rejestrowanie wykorzystania zapytań do Cito API,
+- dodanie migracji bazy danych za pomocą Flyway.
+
+#### Weryfikacja działania
+
+- przetestowano pobieranie i zapisywanie danych CS2 i LoL,
+- przetestowano ręczne uruchamianie synchronizacji obu gier,
+- sprawdzono brak zduplikowanych identyfikatorów meczów,
+- przetestowano import zawodników,
+- sprawdzono zapisywanie historii importów i synchronizacji,
+- przetestowano integrację Cito i dopasowywanie drużyn.
 
 
-
-**Do dokończenia w ramach drugiego etapu pozostało:**
-
-- rozszerzenie integracji PandaScore API o grę League of Legends,
-- dodanie Riot Games API jako drugiego, uzupełniającego źródła danych,
-- implementacja normalizacji i deduplikacji wspólnych danych pochodzących z dwóch źródeł,
-- przygotowanie mapowania identyfikatorów zewnętrznych na identyfikatory wewnętrzne aplikacji,
-- dopracowanie harmonogramu synchronizacji dla różnych rodzajów meczów,
+Póki co import początkowy meczów wykorzystuje ograniczoną liczbę stron API
+i nie obejmuje pełnej historii rozgrywek.
 
 
 ## Kolejny etap

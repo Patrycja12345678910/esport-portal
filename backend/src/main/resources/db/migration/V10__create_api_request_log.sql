@@ -1,0 +1,5 @@
+CREATE TABLE api_request_log (
+    id BIGSERIAL PRIMARY KEY,
+    source VARCHAR(50) NOT NULL,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

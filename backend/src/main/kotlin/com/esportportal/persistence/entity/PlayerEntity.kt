@@ -14,6 +14,9 @@ class PlayerEntity {
     @Column(nullable = false, length = 100)
     var nickname:String=""
 
+    @Column(name = "external_id", length = 100)
+    var externalId:String?=null
+
     @Column(name = "first_name", length = 100)
     var firstName:String? = null
 
@@ -22,6 +25,8 @@ class PlayerEntity {
 
     @Column(length = 100)
     var nationality:String?= null
+
+
 
 
 }
