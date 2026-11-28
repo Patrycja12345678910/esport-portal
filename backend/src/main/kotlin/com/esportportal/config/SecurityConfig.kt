@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.context.annotation.Profile
+import org.springframework.http.HttpMethod
 
 @Configuration
 @Profile("!test")
@@ -17,6 +18,7 @@ class SecurityConfig {
                 auth
                     .requestMatchers("/api/test/pandascore/**").permitAll()
                     .requestMatchers("/api/test/pandascore").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/matches", "/api/v1/matches/*").permitAll()
                     .anyRequest().authenticated()
             }
             .csrf { csrf ->
